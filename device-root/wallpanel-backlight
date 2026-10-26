@@ -26,33 +26,52 @@ read_android_brightness() {
         "select value from system where name='screen_brightness';" 2>/dev/null
 }
 
+uptime_seconds() {
+    busybox awk '{print int($1)}' /proc/uptime 2>/dev/null
+}
+
 LAST_LEVEL=-1
+SCREEN_ON_AT_ZERO_SINCE=0
 while true; do
     LEVEL=$(read_android_brightness)
 
-    if [ -n "$LEVEL" ] && [ "$LEVEL" != "$LAST_LEVEL" ]; then
+    if [ -n "$LEVEL" ]; then
         if [ "$LEVEL" -le 5 ]; then
-            "$TOOL" 0
+            if [ "$LEVEL" != "$LAST_LEVEL" ]; then
+                "$TOOL" 0
+                echo "$(date) android=$LEVEL hardware=0 screen=waiting-for-off" >> "$LOGFILE"
+            fi
 
-            # WallPanel uses brightness zero as its inactivity state. Confirm
-            # that it stayed zero before sending the power key, and only send
-            # it while Android reports the screen as on. This avoids toggling
-            # an already-off panel back on.
-            sleep 1
-            CONFIRMED_LEVEL=$(read_android_brightness)
-            if [ -n "$CONFIRMED_LEVEL" ] && [ "$CONFIRMED_LEVEL" -le 5 ] && screen_is_on; then
-                input keyevent 26
-                echo "$(date) android=$LEVEL hardware=0 screen=off" >> "$LOGFILE"
+            # Android 4.1 can wake the logical display without changing the
+            # brightness setting (for example after USB power activity). Track
+            # that invalid state continuously instead of only reacting to a
+            # brightness transition. A three-second grace period lets a real
+            # WallPanel motion wake change brightness to 191 first.
+            if screen_is_on; then
+                NOW=$(uptime_seconds)
+                if [ "$SCREEN_ON_AT_ZERO_SINCE" -eq 0 ]; then
+                    SCREEN_ON_AT_ZERO_SINCE=$NOW
+                elif [ $((NOW - SCREEN_ON_AT_ZERO_SINCE)) -ge 3 ]; then
+                    CONFIRMED_LEVEL=$(read_android_brightness)
+                    if [ -n "$CONFIRMED_LEVEL" ] && [ "$CONFIRMED_LEVEL" -le 5 ] && screen_is_on; then
+                        input keyevent 26
+                        echo "$(date) android=$LEVEL hardware=0 screen=off" >> "$LOGFILE"
+                    fi
+                    SCREEN_ON_AT_ZERO_SINCE=0
+                fi
             else
-                echo "$(date) android=$LEVEL hardware=0 screen=unchanged" >> "$LOGFILE"
+                SCREEN_ON_AT_ZERO_SINCE=0
             fi
         else
-            HARDWARE_LEVEL=$LEVEL
-            if [ "$HARDWARE_LEVEL" -gt "$MAX_LEVEL" ]; then
-                HARDWARE_LEVEL=$MAX_LEVEL
+            SCREEN_ON_AT_ZERO_SINCE=0
+            if [ "$LEVEL" != "$LAST_LEVEL" ]; then
+                HARDWARE_LEVEL=$LEVEL
+                if [ "$HARDWARE_LEVEL" -gt "$MAX_LEVEL" ]; then
+                    HARDWARE_LEVEL=$MAX_LEVEL
+                fi
+                "$TOOL" "$HARDWARE_LEVEL"
+                echo "$(date) android=$LEVEL hardware=$HARDWARE_LEVEL screen=wake-managed-by-wallpanel" >> "$LOGFILE"
             fi
-            "$TOOL" "$HARDWARE_LEVEL"
-            echo "$(date) android=$LEVEL hardware=$HARDWARE_LEVEL screen=wake-managed-by-wallpanel" >> "$LOGFILE"
         fi
         LAST_LEVEL=$LEVEL
     fi

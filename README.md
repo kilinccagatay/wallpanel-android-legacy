@@ -42,12 +42,22 @@ busybox nohup /system/xbin/wallpanel-runtime-optimizer \
 
 [`device-root/wallpanel-backlight`](device-root/wallpanel-backlight) translates
 WallPanel's inactive brightness value (`0`) into a real Android screen-off
-event. It first sets the hardware backlight to zero, waits one second to avoid
-a transient dim event, confirms that Android still requests zero brightness,
-and sends the power key only when the screen is currently on. Camera motion
-detection and the WallPanel process remain active; a detected motion event wakes
-the display at the configured brightness (191/255 on this profile). This avoids
-blind power-key toggles that could accidentally turn an already-off screen on.
+event. It continuously enforces the invariant that brightness zero means a real
+screen-off state. If Android wakes logically while brightness remains zero, the
+helper waits three seconds, confirms the state, and sends the power key only
+when the screen is still on. Camera motion detection and the WallPanel process
+remain active; a detected motion event wakes the display at the configured
+brightness (191/255 on this profile). This avoids blind power-key toggles that
+could accidentally turn an already-off screen on. The Denver system setting
+`stay_on_while_plugged_in` must be `0`; otherwise USB or charger activity can
+continually reacquire Android's screen wake lock.
+
+Apply that persistent Android 4.1 setting as root through the settings provider:
+
+```sh
+content update --uri content://settings/system --bind value:s:0 \
+    --where "name='stay_on_while_plugged_in'"
+```
 
 [`device-root/wallpanel-watchdog`](device-root/wallpanel-watchdog) restores the
 dashboard after a crash and contains Crosswalk's long-term memory growth. A
