@@ -9,6 +9,9 @@ The motion detector now honors `setting_camera_processinginterval`. Frames that
 arrive before the configured interval are discarded before luma conversion and
 comparison, which targets the high CPU usage seen on Android 4.1 hardware. The
 detector result no longer retains the full camera frame, reducing memory growth.
+Motion comparison uses a quarter-resolution luma sample in each dimension,
+reducing the detector's pixel workload to one sixteenth while preserving the
+coarse 10-by-10 motion regions used by the original algorithm.
 This Denver profile defaults to `1 FPS` with a `1000 ms` processing interval,
 giving roughly one-second motion response while keeping the camera workload low.
 On the test tablet, zero-backlight current remained within the previous

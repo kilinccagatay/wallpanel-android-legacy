@@ -38,6 +38,10 @@ class MotionDetector private constructor(
         private val processingIntervalMs: Long
 ) : Detector<Motion>() {
 
+    companion object {
+        private const val LUMA_SAMPLE_STEP = 4
+    }
+
     private var aggregateLumaMotionDetection: AggregateLumaMotionDetection? = null
     private var lastProcessedAtMs = 0L
 
@@ -63,19 +67,23 @@ class MotionDetector private constructor(
             val sparseArray = SparseArray<Motion>()
             val motion = Motion()
 
-            val img = ImageProcessing.decodeYUV420SPtoLuma(bytes, w, h)
-            var lumaSum = 0
+            val img = ImageProcessing.decodeYUV420SPtoSampledLuma(
+                    bytes, w, h, LUMA_SAMPLE_STEP)
+            val sampledWidth = (w + LUMA_SAMPLE_STEP - 1) / LUMA_SAMPLE_STEP
+            val sampledHeight = (h + LUMA_SAMPLE_STEP - 1) / LUMA_SAMPLE_STEP
+            var lumaSum = 0L
             for (i in img) {
                 lumaSum += i
             }
-            if (lumaSum < minLuma) {
+            if (lumaSum * LUMA_SAMPLE_STEP * LUMA_SAMPLE_STEP < minLuma) {
                 motion.type = MOTION_TOO_DARK
                 sparseArray.put(0, motion)
                 return sparseArray
             }
 
             try {
-                val motionDetected = aggregateLumaMotionDetection!!.detect(img, w, h)
+                val motionDetected = aggregateLumaMotionDetection!!.detect(
+                        img, sampledWidth, sampledHeight)
                 if (motionDetected) {
                     motion.type = MOTION_DETECTED
                     //Timber.d("MOTION_DETECTED")
