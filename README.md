@@ -49,6 +49,13 @@ detection and the WallPanel process remain active; a detected motion event wakes
 the display at the configured brightness (191/255 on this profile). This avoids
 blind power-key toggles that could accidentally turn an already-off screen on.
 
+[`device-root/wallpanel-watchdog`](device-root/wallpanel-watchdog) restores the
+dashboard after a crash and contains Crosswalk's long-term memory growth. A
+high-RSS maintenance restart is permitted only after the display has remained
+dark continuously for five minutes. After the dashboard reloads, the watchdog
+restores real screen-off when brightness is still zero. Short idle periods can
+therefore wake without exposing a maintenance reload.
+
 WallPanel (Legacy) is an Android application for Web Based Dashboards and Home Automation Platforms.  This legacy version supports older devices running Android OS 4.1 using the Crosswalk browser in addition to the WebView component.  Unfortunately, Crosswalk is no longer compatible with Android Studio build tools and this version will most like not be supported. 
 
 ## Support

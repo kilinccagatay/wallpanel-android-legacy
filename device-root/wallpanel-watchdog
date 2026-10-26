@@ -1,0 +1,104 @@
+#!/system/bin/sh
+
+PIDFILE=/data/local/tmp/wallpanel-watchdog.pid
+LOGFILE=/data/local/tmp/wallpanel-watchdog.log
+PACKAGE=com.thanksmister.iot.wallpanellegacy
+ACTIVITY=$PACKAGE/.ui.activities.WelcomeActivity
+SETTINGS_DB=/data/data/com.android.providers.settings/databases/settings.db
+MAX_RSS_KB=180000
+MIN_DARK_SECONDS=300
+
+if [ -f "$PIDFILE" ]; then
+    OLD_PID=$(cat "$PIDFILE" 2>/dev/null)
+    if [ -n "$OLD_PID" ] && kill -0 "$OLD_PID" 2>/dev/null; then
+        exit 0
+    fi
+fi
+
+echo $$ > "$PIDFILE"
+trap 'busybox rm -f "$PIDFILE"' EXIT
+trap 'exit 0' INT TERM
+
+log_message() {
+    echo "$(date) $1" >> "$LOGFILE"
+    LOG_SIZE=$(busybox wc -c < "$LOGFILE" 2>/dev/null)
+    if [ -n "$LOG_SIZE" ] && [ "$LOG_SIZE" -gt 65536 ]; then
+        busybox tail -100 "$LOGFILE" > "$LOGFILE.tmp"
+        busybox mv -f "$LOGFILE.tmp" "$LOGFILE"
+    fi
+}
+
+read_android_brightness() {
+    sqlite3 "$SETTINGS_DB" \
+        "select value from system where name='screen_brightness';" 2>/dev/null
+}
+
+screen_is_on() {
+    dumpsys power 2>/dev/null | busybox grep -q 'mUserState=.*SCREEN_ON_BIT'
+}
+
+uptime_seconds() {
+    busybox awk '{print int($1)}' /proc/uptime 2>/dev/null
+}
+
+start_dashboard() {
+    am start -n "$ACTIVITY" >/dev/null 2>&1
+    log_message "$1"
+    sleep 12
+}
+
+DARK_SINCE=0
+while true; do
+    APP_PID=$(busybox pidof "$PACKAGE" 2>/dev/null)
+    BRIGHTNESS=$(read_android_brightness)
+    NOW=$(uptime_seconds)
+
+    if [ -n "$BRIGHTNESS" ] && [ "$BRIGHTNESS" -le 5 ]; then
+        if [ "$DARK_SINCE" -eq 0 ]; then
+            DARK_SINCE=$NOW
+        fi
+    else
+        DARK_SINCE=0
+    fi
+
+    if [ -z "$APP_PID" ]; then
+        start_dashboard "app_missing: dashboard_started"
+    else
+        FOCUS=$(dumpsys window 2>/dev/null | busybox grep 'mCurrentFocus=' | busybox head -1)
+
+        # After an app/low-memory crash Android returns to the launcher while
+        # WallPanel's background service may be restarted without its Activity.
+        if echo "$FOCUS" | busybox grep -q 'com.android.launcher'; then
+            start_dashboard "launcher_visible: dashboard_started"
+        else
+            RSS_KB=$(busybox awk '/VmRSS:/ {print $2}' "/proc/$APP_PID/status" 2>/dev/null)
+            DARK_SECONDS=0
+            if [ "$DARK_SINCE" -gt 0 ]; then
+                DARK_SECONDS=$((NOW - DARK_SINCE))
+            fi
+
+            # Crosswalk grows over time on this 362 MB tablet. Perform memory
+            # maintenance only after five continuous dark minutes, rather than
+            # immediately before a likely motion wake.
+            if [ -n "$RSS_KB" ] && [ "$RSS_KB" -gt "$MAX_RSS_KB" ] && \
+               [ "$DARK_SECONDS" -ge "$MIN_DARK_SECONDS" ]; then
+                log_message "high_memory_idle: rss_kb=$RSS_KB dark_seconds=$DARK_SECONDS restarting"
+                am force-stop "$PACKAGE" >/dev/null 2>&1
+                sleep 2
+                start_dashboard "high_memory_idle: dashboard_restarted"
+
+                # Starting the Activity may logically wake Android even though
+                # WallPanel still requests brightness zero. Restore screen-off
+                # unless motion made the panel bright while it was loading.
+                BRIGHTNESS=$(read_android_brightness)
+                if [ -n "$BRIGHTNESS" ] && [ "$BRIGHTNESS" -le 5 ] && screen_is_on; then
+                    input keyevent 26
+                    log_message "high_memory_idle: screen_restored_off"
+                fi
+                DARK_SINCE=$(uptime_seconds)
+            fi
+        fi
+    fi
+
+    sleep 30
+done
