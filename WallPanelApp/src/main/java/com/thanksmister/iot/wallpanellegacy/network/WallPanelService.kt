@@ -145,6 +145,13 @@ class WallPanelService : LifecycleService(), MQTTModule.MQTTListener {
         // and local screen/url broadcasts used by the Home Assistant panel.
         configurePowerOptions()
         configureCamera()
+        if (configuration.cameraMotionBright) {
+            // Establish the same brightness/timer state on a fresh boot that a
+            // motion event would create. Otherwise Android may dim the display
+            // first and a later wake can be ignored when the stored setting is
+            // already at its previous maximum.
+            setBrightScreen(MOTION_WAKE_BRIGHTNESS)
+        }
         startForeground()
 
         val filter = IntentFilter()
@@ -822,7 +829,7 @@ class WallPanelService : LifecycleService(), MQTTModule.MQTTListener {
             if (configuration.cameraMotionBright) {
                 Timber.d("configuration.cameraMotionBright ${configuration.cameraMotionBright}")
                 switchScreenOn()
-                setBrightScreen(255)
+                setBrightScreen(MOTION_WAKE_BRIGHTNESS)
             }
             publishMotionDetected()
         }
@@ -853,6 +860,7 @@ class WallPanelService : LifecycleService(), MQTTModule.MQTTListener {
         const val BROADCAST_EVENT_URL_CHANGE = "BROADCAST_EVENT_URL_CHANGE"
         const val BROADCAST_EVENT_SCREEN_TOUCH = "BROADCAST_EVENT_SCREEN_TOUCH"
         const val SCREEN_WAKE_TIME = 30000L
+        const val MOTION_WAKE_BRIGHTNESS = 191 // 75% of the Android 0..255 range
         const val BROADCAST_ALERT_MESSAGE = "BROADCAST_ALERT_MESSAGE"
         const val BROADCAST_CLEAR_ALERT_MESSAGE = "BROADCAST_CLEAR_ALERT_MESSAGE"
         const val BROADCAST_TOAST_MESSAGE = "BROADCAST_TOAST_MESSAGE"
