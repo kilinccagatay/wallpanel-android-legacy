@@ -67,6 +67,18 @@ content update --uri content://settings/system --bind value:s:3 \
     --where "name='stay_on_while_plugged_in'"
 ```
 
+### Persistent Wi-Fi ADB
+
+The Denver boot hook in
+[`device-root/install-recovery.sh`](device-root/install-recovery.sh) starts ADB
+on TCP port `5555` after every reboot. Connect from a computer on the same
+trusted LAN with `adb connect <tablet-ip>:5555`. This old ROM can leave the USB
+transport offline while adbd is in TCP mode; use Wi-Fi as the normal management
+path. Android 4.1 may expose the service without modern RSA authorization, so do
+not enable it on a guest, public, or otherwise untrusted network. Reserve the
+tablet's IP address in the router's DHCP settings so the connection address
+does not change.
+
 [`device-root/wallpanel-watchdog`](device-root/wallpanel-watchdog) restores the
 dashboard after a crash and contains Crosswalk's long-term memory growth. A
 high-RSS maintenance restart is permitted only after the display has remained
