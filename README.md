@@ -9,6 +9,26 @@ The motion detector now honors `setting_camera_processinginterval`. Frames that
 arrive before the configured interval are discarded before luma conversion and
 comparison, which targets the high CPU usage seen on Android 4.1 hardware. The
 detector result no longer retains the full camera frame, reducing memory growth.
+
+### Optional rooted-device runtime optimizer
+
+[`device-root/wallpanel-runtime-optimizer`](device-root/wallpanel-runtime-optimizer)
+is an optional root daemon for tablets dedicated exclusively to WallPanel. It
+watches the WallPanel process and temporarily force-stops legacy calendar,
+Google sync/store, browser, gallery, launcher, keyboard, media-indexing and
+preinstalled entertainment apps after the dashboard starts. Core Android,
+SystemUI, Wi-Fi, camera/media services and unknown user packages are preserved.
+
+The optimizer does not use `pm disable` and does not uninstall anything. A
+reboot or manually launching a package restores normal Android behavior. Copy
+the script to `/system/xbin/`, make it executable, and launch it from the
+device's root boot hook (`install-recovery.sh` on the Denver firmware):
+
+```sh
+busybox nohup /system/xbin/wallpanel-runtime-optimizer \
+    >/data/local/tmp/wallpanel-runtime-optimizer-boot.log 2>&1 &
+```
+
 WallPanel (Legacy) is an Android application for Web Based Dashboards and Home Automation Platforms.  This legacy version supports older devices running Android OS 4.1 using the Crosswalk browser in addition to the WebView component.  Unfortunately, Crosswalk is no longer compatible with Android Studio build tools and this version will most like not be supported. 
 
 ## Support

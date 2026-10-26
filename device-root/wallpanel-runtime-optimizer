@@ -1,0 +1,89 @@
+#!/system/bin/sh
+
+PIDFILE=/data/local/tmp/wallpanel-runtime-optimizer.pid
+LOGFILE=/data/local/tmp/wallpanel-runtime-optimizer.log
+PACKAGE=com.thanksmister.iot.wallpanellegacy
+SWEEP_TICKS=30
+
+UNUSED_PACKAGES="
+com.android.providers.calendar
+com.android.calendar
+com.android.gallery3d
+com.android.musicfx
+com.android.browser
+com.android.chrome
+com.android.providers.media
+com.android.launcher
+com.android.inputmethod.latin
+com.google.android.partnersetup
+com.google.android.inputmethod.latin.dictionarypack
+com.google.android.gsf
+com.google.android.gsf.login
+com.google.android.syncadapters.calendar
+com.google.android.youtube
+com.android.vending
+com.svox.pico
+com.adobe.flashplayer
+com.adobe.reader
+com.aldiko.android
+com.dataviz.docstogo
+com.mxtech.videoplayer.ad
+com.netflix.mediaclient
+x.org.server
+yuku.mp3recorder.full
+"
+
+if [ -f "$PIDFILE" ]; then
+    OLD_PID=$(cat "$PIDFILE" 2>/dev/null)
+    if [ -n "$OLD_PID" ] && kill -0 "$OLD_PID" 2>/dev/null; then
+        exit 0
+    fi
+fi
+
+echo $$ > "$PIDFILE"
+trap 'busybox rm -f "$PIDFILE"' EXIT
+trap 'exit 0' INT TERM
+
+log_message() {
+    echo "$(date) $1" >> "$LOGFILE"
+    LOG_SIZE=$(busybox wc -c < "$LOGFILE" 2>/dev/null)
+    if [ -n "$LOG_SIZE" ] && [ "$LOG_SIZE" -gt 65536 ]; then
+        busybox tail -100 "$LOGFILE" > "$LOGFILE.tmp"
+        busybox mv -f "$LOGFILE.tmp" "$LOGFILE"
+    fi
+}
+
+optimize_runtime() {
+    for TARGET in $UNUSED_PACKAGES; do
+        am force-stop "$TARGET" >/dev/null 2>&1
+    done
+    log_message "optimized wallpanel_pid=$1"
+}
+
+LAST_APP_PID=""
+TICKS=$SWEEP_TICKS
+
+while true; do
+    APP_PID=$(busybox pidof "$PACKAGE" 2>/dev/null)
+
+    if [ -n "$APP_PID" ]; then
+        if [ "$APP_PID" != "$LAST_APP_PID" ]; then
+            # Let the boot receiver and dashboard Activity settle first.
+            sleep 8
+            optimize_runtime "$APP_PID"
+            LAST_APP_PID="$APP_PID"
+            TICKS=0
+        elif [ "$TICKS" -ge "$SWEEP_TICKS" ]; then
+            # A light 15-minute sweep catches sync services that respawn.
+            optimize_runtime "$APP_PID"
+            TICKS=0
+        else
+            TICKS=$((TICKS + 1))
+        fi
+    else
+        LAST_APP_PID=""
+        TICKS=$SWEEP_TICKS
+    fi
+
+    sleep 30
+done

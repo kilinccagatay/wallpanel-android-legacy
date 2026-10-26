@@ -153,7 +153,6 @@ class WallPanelService : LifecycleService(), MQTTModule.MQTTListener {
             setBrightScreen(MOTION_WAKE_BRIGHTNESS)
         }
         startForeground()
-        optimizeDedicatedPanelRuntime()
 
         val filter = IntentFilter()
         filter.addAction(BROADCAST_EVENT_URL_CHANGE)
@@ -227,30 +226,6 @@ class WallPanelService : LifecycleService(), MQTTModule.MQTTListener {
         if (notification != null) {
             startForeground(ONGOING_NOTIFICATION_ID, notification)
         }
-    }
-
-    /**
-     * Reclaim RAM and background I/O from apps that are unnecessary on this
-     * dedicated Home Assistant panel. Force-stop is intentionally temporary:
-     * Android restores the packages after a reboot, and launching one manually
-     * restores it on demand. Core Android, Wi-Fi, SystemUI, camera/media and the
-     * user's own auxiliary packages are deliberately left alone.
-     */
-    private fun optimizeDedicatedPanelRuntime() {
-        Thread({
-            PANEL_UNUSED_PACKAGES.forEach { packageName ->
-                try {
-                    val process = ProcessBuilder(
-                            "su", "0", "am", "force-stop", packageName
-                    ).redirectErrorStream(true).start()
-                    process.inputStream.bufferedReader().use { it.readText() }
-                    val exitCode = process.waitFor()
-                    Timber.d("Panel runtime force-stop $packageName: $exitCode")
-                } catch (e: Exception) {
-                    Timber.w(e, "Unable to force-stop $packageName")
-                }
-            }
-        }, "panel-runtime-optimizer").start()
     }
 
     private fun handleNetworkConnect() {
@@ -885,33 +860,6 @@ class WallPanelService : LifecycleService(), MQTTModule.MQTTListener {
         const val SCREEN_WAKE_TIME = 30000L
         const val MOTION_WAKE_BRIGHTNESS = 191 // 75% of the Android 0..255 range
         const val MOTION_DIM_BRIGHTNESS = 0
-        val PANEL_UNUSED_PACKAGES = arrayOf(
-                "com.android.providers.calendar",
-                "com.android.calendar",
-                "com.android.gallery3d",
-                "com.android.musicfx",
-                "com.android.browser",
-                "com.android.chrome",
-                "com.android.providers.media",
-                "com.android.launcher",
-                "com.android.inputmethod.latin",
-                "com.google.android.partnersetup",
-                "com.google.android.inputmethod.latin.dictionarypack",
-                "com.google.android.gsf",
-                "com.google.android.gsf.login",
-                "com.google.android.syncadapters.calendar",
-                "com.google.android.youtube",
-                "com.android.vending",
-                "com.svox.pico",
-                "com.adobe.flashplayer",
-                "com.adobe.reader",
-                "com.aldiko.android",
-                "com.dataviz.docstogo",
-                "com.mxtech.videoplayer.ad",
-                "com.netflix.mediaclient",
-                "x.org.server",
-                "yuku.mp3recorder.full"
-        )
         const val BROADCAST_ALERT_MESSAGE = "BROADCAST_ALERT_MESSAGE"
         const val BROADCAST_CLEAR_ALERT_MESSAGE = "BROADCAST_CLEAR_ALERT_MESSAGE"
         const val BROADCAST_TOAST_MESSAGE = "BROADCAST_TOAST_MESSAGE"
