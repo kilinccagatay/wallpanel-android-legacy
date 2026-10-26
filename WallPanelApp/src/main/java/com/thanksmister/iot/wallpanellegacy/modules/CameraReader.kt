@@ -33,13 +33,12 @@ import com.google.android.gms.vision.face.FaceDetector
 import com.google.android.gms.vision.face.LargestFaceFocusingProcessor
 import com.thanksmister.iot.wallpanellegacy.persistence.Configuration
 import com.thanksmister.iot.wallpanellegacy.ui.views.CameraSourcePreview
-import io.github.silvaren.easyrs.tools.Nv21Image
 import timber.log.Timber
 import java.io.ByteArrayOutputStream
 import java.lang.ref.WeakReference
 import javax.inject.Inject
 import android.graphics.Bitmap
-import android.support.v8.renderscript.RenderScript
+import com.jjoe64.motiondetection.motiondetection.ImageProcessing
 import com.google.android.gms.vision.CameraSource.CAMERA_FACING_BACK
 import com.google.android.gms.vision.CameraSource.CAMERA_FACING_FRONT
 import java.io.IOException
@@ -47,7 +46,6 @@ import java.io.IOException
 class CameraReader @Inject
 constructor(private val context: Context) {
 
-    private val renderScript: RenderScript = RenderScript.create(context)
     private var cameraCallback: CameraCallback? = null
     private var faceDetector: FaceDetector? = null
     private var barcodeDetector: BarcodeDetector? = null
@@ -292,7 +290,7 @@ constructor(private val context: Context) {
                     override fun onUpdate(p0: Detector.Detections<Stream>?, stream: Stream?) {
                         super.onUpdate(p0, stream)
                         if (stream?.byteArray != null && bitmapComplete) {
-                            byteArrayCreateTask = ByteArrayTask(context, renderScript, object : OnCompleteListener {
+                            byteArrayCreateTask = ByteArrayTask(context, object : OnCompleteListener {
                                 override fun onComplete(byteArray: ByteArray?) {
                                     bitmapComplete = true
                                     setJpeg(byteArray!!)
@@ -410,7 +408,7 @@ constructor(private val context: Context) {
         fun onComplete(byteArray: ByteArray?)
     }
 
-    class ByteArrayTask(context: Context, private val renderScript: RenderScript, private val onCompleteListener: OnCompleteListener) : AsyncTask<Any, Void, ByteArray>() {
+    class ByteArrayTask(context: Context, private val onCompleteListener: OnCompleteListener) : AsyncTask<Any, Void, ByteArray>() {
 
         private val contextRef: WeakReference<Context> = WeakReference(context)
 
@@ -425,7 +423,8 @@ constructor(private val context: Context) {
 
             val windowService = contextRef.get()!!.getSystemService(Context.WINDOW_SERVICE) as WindowManager
             val currentRotation = windowService.defaultDisplay.rotation
-            val nv21Bitmap = Nv21Image.nv21ToBitmap(renderScript, byteArray, width, height)
+            val rgb = ImageProcessing.decodeYUV420SPtoRGB(byteArray, width, height)
+            val nv21Bitmap = Bitmap.createBitmap(rgb, width, height, Bitmap.Config.ARGB_8888)
 
             var rotate = orientation
             when (currentRotation) {
