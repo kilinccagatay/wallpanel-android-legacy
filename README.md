@@ -12,10 +12,11 @@ detector result no longer retains the full camera frame, reducing memory growth.
 Motion comparison uses a quarter-resolution luma sample in each dimension,
 reducing the detector's pixel workload to one sixteenth while preserving the
 coarse 10-by-10 motion regions used by the original algorithm.
-This Denver profile defaults to `1 FPS` with a `1000 ms` processing interval,
-giving roughly one-second motion response while keeping the camera workload low.
-On the test tablet, zero-backlight current remained within the previous
-measurement range after changing the interval from 2000 ms to 1000 ms.
+This Denver profile defaults to `2 FPS` with a `500 ms` processing interval,
+giving roughly half-second motion response while keeping the camera workload
+low. On the test tablet, the sampled detector reduced WallPanel CPU use from
+about 17% to 5% at this rate; zero-backlight current was about 501 mA versus
+about 494 mA at 1 FPS / 1000 ms.
 
 ### Optional rooted-device runtime optimizer
 
