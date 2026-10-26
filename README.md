@@ -19,10 +19,11 @@ Google sync/store, browser, gallery, launcher, keyboard, media-indexing and
 preinstalled entertainment apps after the dashboard starts. Core Android,
 SystemUI, Wi-Fi, camera/media services and unknown user packages are preserved.
 
-The optimizer does not use `pm disable` and does not uninstall anything. A
-reboot or manually launching a package restores normal Android behavior. Copy
-the script to `/system/xbin/`, make it executable, and launch it from the
-device's root boot hook (`install-recovery.sh` on the Denver firmware):
+The optimizer does not use `pm disable` and does not uninstall anything. Stop
+the daemon and remove its boot-hook entry to restore normal Android behavior;
+no package re-enabling is required. Copy the script to `/system/xbin/`, make it
+executable, and launch it from the device's root boot hook
+(`install-recovery.sh` on the Denver firmware):
 
 ```sh
 busybox nohup /system/xbin/wallpanel-runtime-optimizer \
