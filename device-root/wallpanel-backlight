@@ -2,7 +2,7 @@
 
 PIDFILE=/data/local/tmp/wallpanel-backlight.pid
 LOGFILE=/data/local/tmp/wallpanel-backlight.log
-TOOL=/system/xbin/sunxi-backlight
+TOOL=/system/xbin/sunxi-displayctl
 SETTINGS_DB=/data/data/com.android.providers.settings/databases/settings.db
 MAX_LEVEL=191
 
@@ -17,60 +17,40 @@ echo $$ > "$PIDFILE"
 trap 'busybox rm -f "$PIDFILE"' EXIT
 trap 'exit 0' INT TERM
 
-screen_is_on() {
-    dumpsys power 2>/dev/null | busybox grep -q 'mUserState=.*SCREEN_ON_BIT'
-}
-
 read_android_brightness() {
     sqlite3 "$SETTINGS_DB" \
         "select value from system where name='screen_brightness';" 2>/dev/null
 }
 
-uptime_seconds() {
-    busybox awk '{print int($1)}' /proc/uptime 2>/dev/null
-}
-
 LAST_LEVEL=-1
-SCREEN_ON_AT_ZERO_SINCE=0
+OFF_REASSERT_COUNT=0
 while true; do
     LEVEL=$(read_android_brightness)
 
     if [ -n "$LEVEL" ]; then
         if [ "$LEVEL" -le 5 ]; then
-            if [ "$LEVEL" != "$LAST_LEVEL" ]; then
-                "$TOOL" 0
-                echo "$(date) android=$LEVEL hardware=0 screen=waiting-for-off" >> "$LOGFILE"
-            fi
-
-            # Android 4.1 can wake the logical display without changing the
-            # brightness setting (for example after USB power activity). Track
-            # that invalid state continuously instead of only reacting to a
-            # brightness transition. A three-second grace period lets a real
-            # WallPanel motion wake change brightness to 191 first.
-            if screen_is_on; then
-                NOW=$(uptime_seconds)
-                if [ "$SCREEN_ON_AT_ZERO_SINCE" -eq 0 ]; then
-                    SCREEN_ON_AT_ZERO_SINCE=$NOW
-                elif [ $((NOW - SCREEN_ON_AT_ZERO_SINCE)) -ge 3 ]; then
-                    CONFIRMED_LEVEL=$(read_android_brightness)
-                    if [ -n "$CONFIRMED_LEVEL" ] && [ "$CONFIRMED_LEVEL" -le 5 ] && screen_is_on; then
-                        input keyevent 26
-                        echo "$(date) android=$LEVEL hardware=0 screen=off" >> "$LOGFILE"
-                    fi
-                    SCREEN_ON_AT_ZERO_SINCE=0
+            # Keep Android and the camera pipeline awake, but power down the
+            # Allwinner LCD controller itself. Reassert periodically because a
+            # window or USB event can turn the panel back on without changing
+            # Android's stored brightness value.
+            if [ "$LEVEL" != "$LAST_LEVEL" ] || [ "$OFF_REASSERT_COUNT" -ge 5 ]; then
+                "$TOOL" off
+                OFF_REASSERT_COUNT=0
+                if [ "$LEVEL" != "$LAST_LEVEL" ]; then
+                    echo "$(date) android=$LEVEL lcd=off camera=active" >> "$LOGFILE"
                 fi
-            else
-                SCREEN_ON_AT_ZERO_SINCE=0
             fi
+            OFF_REASSERT_COUNT=$((OFF_REASSERT_COUNT + 1))
         else
-            SCREEN_ON_AT_ZERO_SINCE=0
+            OFF_REASSERT_COUNT=0
             if [ "$LEVEL" != "$LAST_LEVEL" ]; then
                 HARDWARE_LEVEL=$LEVEL
                 if [ "$HARDWARE_LEVEL" -gt "$MAX_LEVEL" ]; then
                     HARDWARE_LEVEL=$MAX_LEVEL
                 fi
+                "$TOOL" on
                 "$TOOL" "$HARDWARE_LEVEL"
-                echo "$(date) android=$LEVEL hardware=$HARDWARE_LEVEL screen=wake-managed-by-wallpanel" >> "$LOGFILE"
+                echo "$(date) android=$LEVEL lcd=on hardware=$HARDWARE_LEVEL" >> "$LOGFILE"
             fi
         fi
         LAST_LEVEL=$LEVEL

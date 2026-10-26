@@ -41,30 +41,39 @@ busybox nohup /system/xbin/wallpanel-runtime-optimizer \
 ### Rooted-device display power helper
 
 [`device-root/wallpanel-backlight`](device-root/wallpanel-backlight) translates
-WallPanel's inactive brightness value (`0`) into a real Android screen-off
-event. It continuously enforces the invariant that brightness zero means a real
-screen-off state. If Android wakes logically while brightness remains zero, the
-helper waits three seconds, confirms the state, and sends the power key only
-when the screen is still on. Camera motion detection and the WallPanel process
-remain active; a detected motion event wakes the display at the configured
-brightness (191/255 on this profile). This avoids blind power-key toggles that
-could accidentally turn an already-off screen on. The Denver system setting
-`stay_on_while_plugged_in` must be `0`; otherwise USB or charger activity can
-continually reacquire Android's screen wake lock.
+WallPanel's inactive brightness value (`0`) into the Allwinner controller's
+hardware `LCD_OFF` command. Android and the camera pipeline remain logically
+awake, while the LCD panel itself is powered down. The helper periodically
+reasserts `LCD_OFF`, because a window or USB event can enable the panel without
+changing Android's stored brightness. Camera motion raises the brightness above
+zero; the helper then sends `LCD_ON` and applies the configured 191/255 (75%)
+brightness cap.
+
+The helper requires the small rooted-device utility built from
+[`device-root/sunxi-displayctl.c`](device-root/sunxi-displayctl.c) to be
+installed as `/system/xbin/sunxi-displayctl`. Unlike a brightness-only ioctl
+helper, it supports `on`, `off`, and numeric `0-255` commands.
+
+A real Android screen-off state is intentionally avoided on the TAC-70051. Its
+legacy Allwinner V4L2 driver stops delivering camera frames in that state, so
+motion can no longer wake the device. For this dedicated panel,
+`stay_on_while_plugged_in` must therefore remain `3` (AC and USB) to keep the
+camera pipeline alive while the hardware LCD is off.
 
 Apply that persistent Android 4.1 setting as root through the settings provider:
 
 ```sh
-content update --uri content://settings/system --bind value:s:0 \
+content update --uri content://settings/system --bind value:s:3 \
     --where "name='stay_on_while_plugged_in'"
 ```
 
 [`device-root/wallpanel-watchdog`](device-root/wallpanel-watchdog) restores the
 dashboard after a crash and contains Crosswalk's long-term memory growth. A
 high-RSS maintenance restart is permitted only after the display has remained
-dark continuously for five minutes. After the dashboard reloads, the watchdog
-restores real screen-off when brightness is still zero. Short idle periods can
-therefore wake without exposing a maintenance reload.
+dark continuously for five minutes. After the dashboard reloads, the backlight
+helper restores hardware `LCD_OFF` when brightness is still zero, without
+putting Android or the camera into real sleep. Short idle periods can therefore
+wake without exposing a maintenance reload.
 
 WallPanel (Legacy) is an Android application for Web Based Dashboards and Home Automation Platforms.  This legacy version supports older devices running Android OS 4.1 using the Crosswalk browser in addition to the WebView component.  Unfortunately, Crosswalk is no longer compatible with Android Studio build tools and this version will most like not be supported. 
 

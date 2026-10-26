@@ -33,10 +33,6 @@ read_android_brightness() {
         "select value from system where name='screen_brightness';" 2>/dev/null
 }
 
-screen_is_on() {
-    dumpsys power 2>/dev/null | busybox grep -q 'mUserState=.*SCREEN_ON_BIT'
-}
-
 uptime_seconds() {
     busybox awk '{print int($1)}' /proc/uptime 2>/dev/null
 }
@@ -87,14 +83,9 @@ while true; do
                 sleep 2
                 start_dashboard "high_memory_idle: dashboard_restarted"
 
-                # Starting the Activity may logically wake Android even though
-                # WallPanel still requests brightness zero. Restore screen-off
-                # unless motion made the panel bright while it was loading.
-                BRIGHTNESS=$(read_android_brightness)
-                if [ -n "$BRIGHTNESS" ] && [ "$BRIGHTNESS" -le 5 ] && screen_is_on; then
-                    input keyevent 26
-                    log_message "high_memory_idle: screen_restored_off"
-                fi
+                # The backlight helper continuously restores hardware LCD_OFF
+                # while brightness remains zero. Do not send a power key here:
+                # real Android screen-off stalls this tablet's V4L2 camera.
                 DARK_SINCE=$(uptime_seconds)
             fi
         fi
