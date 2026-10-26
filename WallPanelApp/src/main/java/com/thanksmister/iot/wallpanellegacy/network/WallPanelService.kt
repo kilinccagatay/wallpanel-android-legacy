@@ -210,11 +210,7 @@ class WallPanelService : LifecycleService(), MQTTModule.MQTTListener {
             return state
         }
 
-    /**
-     * Keep just enough panel light for the front camera to resolve motion.
-     * On the Denver TAC-70051, level 5 leaves the camera effectively blind;
-     * level 20 is the lowest value verified to wake reliably in this setup.
-     */
+    /** Turn the backlight fully off while leaving the dashboard and camera alive. */
     private val dimScreen = Runnable {
         changeScreenBrightness(MOTION_DIM_BRIGHTNESS)
         timerActive = false
@@ -630,7 +626,7 @@ class WallPanelService : LifecycleService(), MQTTModule.MQTTListener {
                     //Automatic mode, need to be in manual to change brightness
                     Settings.System.putInt(contentResolver, Settings.System.SCREEN_BRIGHTNESS_MODE, Settings.System.SCREEN_BRIGHTNESS_MODE_MANUAL)
                 }
-                if (brightness in 1..255) {
+                if (brightness in 0..255) {
                     Settings.System.putInt(contentResolver, Settings.System.SCREEN_BRIGHTNESS, brightness)
                 }
             } catch (e: SecurityException) {
@@ -863,7 +859,7 @@ class WallPanelService : LifecycleService(), MQTTModule.MQTTListener {
         const val BROADCAST_EVENT_SCREEN_TOUCH = "BROADCAST_EVENT_SCREEN_TOUCH"
         const val SCREEN_WAKE_TIME = 30000L
         const val MOTION_WAKE_BRIGHTNESS = 191 // 75% of the Android 0..255 range
-        const val MOTION_DIM_BRIGHTNESS = 20
+        const val MOTION_DIM_BRIGHTNESS = 0
         const val BROADCAST_ALERT_MESSAGE = "BROADCAST_ALERT_MESSAGE"
         const val BROADCAST_CLEAR_ALERT_MESSAGE = "BROADCAST_CLEAR_ALERT_MESSAGE"
         const val BROADCAST_TOAST_MESSAGE = "BROADCAST_TOAST_MESSAGE"
