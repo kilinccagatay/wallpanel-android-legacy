@@ -30,6 +30,7 @@ import android.view.View
 import android.view.ViewTreeObserver
 import android.view.WindowManager
 import android.widget.Toast
+import com.thanksmister.iot.wallpanellegacy.R
 import com.thanksmister.iot.wallpanellegacy.network.WallPanelService
 import com.thanksmister.iot.wallpanellegacy.network.WallPanelService.Companion.BROADCAST_ALERT_MESSAGE
 import com.thanksmister.iot.wallpanellegacy.network.WallPanelService.Companion.BROADCAST_CLEAR_ALERT_MESSAGE
