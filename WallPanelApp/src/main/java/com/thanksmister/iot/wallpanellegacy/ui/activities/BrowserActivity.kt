@@ -22,6 +22,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.os.Build
+import android.os.BatteryManager
 import android.os.Bundle
 import android.support.v4.content.LocalBroadcastManager
 import android.view.KeyEvent
@@ -35,6 +36,7 @@ import com.thanksmister.iot.wallpanellegacy.network.WallPanelService.Companion.B
 import com.thanksmister.iot.wallpanellegacy.network.WallPanelService.Companion.BROADCAST_TOAST_MESSAGE
 import com.thanksmister.iot.wallpanellegacy.persistence.Configuration
 import com.thanksmister.iot.wallpanellegacy.utils.DialogUtils
+import com.thanksmister.iot.wallpanellegacy.ui.views.BatteryBadgeView
 import dagger.android.support.DaggerAppCompatActivity
 import timber.log.Timber
 import javax.inject.Inject
@@ -47,8 +49,23 @@ abstract class BrowserActivity : DaggerAppCompatActivity() {
     var mOnScrollChangedListener: ViewTreeObserver.OnScrollChangedListener? = null
     private var wallPanelService: Intent? = null
     private var decorView: View? = null
+    private var batteryBadge: BatteryBadgeView? = null
+    private var batteryReceiverRegistered = false
     var displayProgress = true
     var zoomLevel = 1.0f
+
+    private val batteryReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            val level = intent.getIntExtra(BatteryManager.EXTRA_LEVEL, 0)
+            val scale = intent.getIntExtra(BatteryManager.EXTRA_SCALE, 100)
+            val percentage = if (scale > 0) (level * 100 / scale) else 0
+            val status = intent.getIntExtra(
+                    BatteryManager.EXTRA_STATUS, BatteryManager.BATTERY_STATUS_UNKNOWN)
+            val charging = status == BatteryManager.BATTERY_STATUS_CHARGING ||
+                    status == BatteryManager.BATTERY_STATUS_FULL
+            batteryBadge?.setBatteryState(percentage, charging)
+        }
+    }
 
     // handler for received data from service
     private val mBroadcastReceiver = object : BroadcastReceiver() {
@@ -108,6 +125,15 @@ abstract class BrowserActivity : DaggerAppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
+        batteryBadge = findViewById<View>(R.id.battery_badge) as BatteryBadgeView
+        if (!batteryReceiverRegistered) {
+            val batteryIntent = registerReceiver(
+                    batteryReceiver, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
+            batteryReceiverRegistered = true
+            if (batteryIntent != null) {
+                batteryReceiver.onReceive(this, batteryIntent)
+            }
+        }
         val filter = IntentFilter()
         filter.addAction(BROADCAST_ACTION_LOAD_URL)
         filter.addAction(BROADCAST_ACTION_JS_EXEC)
@@ -122,6 +148,10 @@ abstract class BrowserActivity : DaggerAppCompatActivity() {
 
     override fun onPause() {
         super.onPause()
+        if (batteryReceiverRegistered) {
+            unregisterReceiver(batteryReceiver)
+            batteryReceiverRegistered = false
+        }
         val bm = LocalBroadcastManager.getInstance(this)
         bm.unregisterReceiver(mBroadcastReceiver)
     }
