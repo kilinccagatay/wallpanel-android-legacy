@@ -141,14 +141,11 @@ class WallPanelService : LifecycleService(), MQTTModule.MQTTListener {
 
         this.appLaunchUrl = configuration.appLaunchUrl
 
-        configureMqtt()
+        // Lite runtime: keep only the power, motion camera, dashboard notification,
+        // and local screen/url broadcasts used by the Home Assistant panel.
         configurePowerOptions()
-        startHttp()
         configureCamera()
-        configureAudioPlayer()
         startForeground()
-        configureTextToSpeech()
-        startSensors()
 
         val filter = IntentFilter()
         filter.addAction(BROADCAST_EVENT_URL_CHANGE)
@@ -162,18 +159,11 @@ class WallPanelService : LifecycleService(), MQTTModule.MQTTListener {
 
     override fun onDestroy() {
         super.onDestroy()
-        if(mqttModule != null) {
-            mqttModule?.pause()
-            mqttModule = null
-        }
         if(localBroadCastManager != null) {
             localBroadCastManager?.unregisterReceiver(mBroadcastReceiver)
         }
         cameraReader.stopCamera()
-        sensorReader.stopReadings()
-        stopHttp()
         stopPowerOptions()
-        reconnectHandler.removeCallbacks(restartMqttRunnable)
     }
 
     override fun onBind(intent: Intent): IBinder? {
@@ -231,19 +221,6 @@ class WallPanelService : LifecycleService(), MQTTModule.MQTTListener {
         if (notification != null) {
             startForeground(ONGOING_NOTIFICATION_ID, notification)
         }
-
-        if (notification != null) {
-            startForeground(ONGOING_NOTIFICATION_ID, notification)
-        }
-        // listen for network connectivity changes
-        connectionLiveData = ConnectionLiveData(this)
-        connectionLiveData?.observe(this, Observer { connected ->
-            if(connected!!) {
-                handleNetworkConnect()
-            } else {
-                handleNetworkDisconnect()
-            }
-        })
     }
 
     private fun handleNetworkConnect() {

@@ -311,7 +311,11 @@ constructor(private val context: Context) {
         }
 
         if(configuration.cameraEnabled && configuration.cameraMotionEnabled) {
-            motionDetector = MotionDetector.Builder(configuration.cameraMotionMinLuma, configuration.cameraMotionLeniency).build()
+            motionDetector = MotionDetector.Builder(
+                    configuration.cameraMotionMinLuma,
+                    configuration.cameraMotionLeniency,
+                    configuration.cameraProcessingIntervalMs
+            ).build()
             motionDetectorProcessor = MultiProcessor.Builder<Motion>(MultiProcessor.Factory<Motion> {
                 object : Tracker<Motion>() {
                     override fun onUpdate(p0: Detector.Detections<Motion>?, motion: Motion?) {

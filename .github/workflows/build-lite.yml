@@ -1,0 +1,36 @@
+name: Build WallPanel Lite
+
+on:
+  push:
+    branches:
+      - master
+      - lite-motion-core
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  apk:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '8'
+
+      - uses: android-actions/setup-android@v3
+
+      - name: Install Android 27 build tools
+        run: sdkmanager "platforms;android-27" "build-tools;28.0.2"
+
+      - name: Build debug APK
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleProdDebug --stacktrace
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wallpanel-lite-prod-debug
+          path: WallPanelApp/build/outputs/apk/prod/debug/*.apk
+          if-no-files-found: error

@@ -1,4 +1,14 @@
 # WallPanel
+
+> This fork contains a lightweight runtime profile for the Denver TAC-70051
+> Home Assistant panel. It keeps the legacy Crosswalk dashboard, boot launch,
+> screen/brightness handling, and camera motion wake. MQTT, HTTP/MJPEG,
+> TTS/audio, sensor publishing, and Crashlytics are not started.
+
+The motion detector now honors `setting_camera_processinginterval`. Frames that
+arrive before the configured interval are discarded before luma conversion and
+comparison, which targets the high CPU usage seen on Android 4.1 hardware. The
+detector result no longer retains the full camera frame, reducing memory growth.
 WallPanel (Legacy) is an Android application for Web Based Dashboards and Home Automation Platforms.  This legacy version supports older devices running Android OS 4.1 using the Crosswalk browser in addition to the WebView component.  Unfortunately, Crosswalk is no longer compatible with Android Studio build tools and this version will most like not be supported. 
 
 ## Support
