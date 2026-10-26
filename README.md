@@ -38,6 +38,17 @@ busybox nohup /system/xbin/wallpanel-runtime-optimizer \
     >/data/local/tmp/wallpanel-runtime-optimizer-boot.log 2>&1 &
 ```
 
+### Rooted-device display power helper
+
+[`device-root/wallpanel-backlight`](device-root/wallpanel-backlight) translates
+WallPanel's inactive brightness value (`0`) into a real Android screen-off
+event. It first sets the hardware backlight to zero, waits one second to avoid
+a transient dim event, confirms that Android still requests zero brightness,
+and sends the power key only when the screen is currently on. Camera motion
+detection and the WallPanel process remain active; a detected motion event wakes
+the display at the configured brightness (191/255 on this profile). This avoids
+blind power-key toggles that could accidentally turn an already-off screen on.
+
 WallPanel (Legacy) is an Android application for Web Based Dashboards and Home Automation Platforms.  This legacy version supports older devices running Android OS 4.1 using the Crosswalk browser in addition to the WebView component.  Unfortunately, Crosswalk is no longer compatible with Android Studio build tools and this version will most like not be supported. 
 
 ## Support

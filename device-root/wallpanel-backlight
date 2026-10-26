@@ -1,0 +1,61 @@
+#!/system/bin/sh
+
+PIDFILE=/data/local/tmp/wallpanel-backlight.pid
+LOGFILE=/data/local/tmp/wallpanel-backlight.log
+TOOL=/system/xbin/sunxi-backlight
+SETTINGS_DB=/data/data/com.android.providers.settings/databases/settings.db
+MAX_LEVEL=191
+
+if [ -f "$PIDFILE" ]; then
+    OLD_PID=$(cat "$PIDFILE" 2>/dev/null)
+    if [ -n "$OLD_PID" ] && kill -0 "$OLD_PID" 2>/dev/null; then
+        exit 0
+    fi
+fi
+
+echo $$ > "$PIDFILE"
+trap 'busybox rm -f "$PIDFILE"' EXIT
+trap 'exit 0' INT TERM
+
+screen_is_on() {
+    dumpsys power 2>/dev/null | busybox grep -q 'mUserState=.*SCREEN_ON_BIT'
+}
+
+read_android_brightness() {
+    sqlite3 "$SETTINGS_DB" \
+        "select value from system where name='screen_brightness';" 2>/dev/null
+}
+
+LAST_LEVEL=-1
+while true; do
+    LEVEL=$(read_android_brightness)
+
+    if [ -n "$LEVEL" ] && [ "$LEVEL" != "$LAST_LEVEL" ]; then
+        if [ "$LEVEL" -le 5 ]; then
+            "$TOOL" 0
+
+            # WallPanel uses brightness zero as its inactivity state. Confirm
+            # that it stayed zero before sending the power key, and only send
+            # it while Android reports the screen as on. This avoids toggling
+            # an already-off panel back on.
+            sleep 1
+            CONFIRMED_LEVEL=$(read_android_brightness)
+            if [ -n "$CONFIRMED_LEVEL" ] && [ "$CONFIRMED_LEVEL" -le 5 ] && screen_is_on; then
+                input keyevent 26
+                echo "$(date) android=$LEVEL hardware=0 screen=off" >> "$LOGFILE"
+            else
+                echo "$(date) android=$LEVEL hardware=0 screen=unchanged" >> "$LOGFILE"
+            fi
+        else
+            HARDWARE_LEVEL=$LEVEL
+            if [ "$HARDWARE_LEVEL" -gt "$MAX_LEVEL" ]; then
+                HARDWARE_LEVEL=$MAX_LEVEL
+            fi
+            "$TOOL" "$HARDWARE_LEVEL"
+            echo "$(date) android=$LEVEL hardware=$HARDWARE_LEVEL screen=wake-managed-by-wallpanel" >> "$LOGFILE"
+        fi
+        LAST_LEVEL=$LEVEL
+    fi
+
+    sleep 1
+done
