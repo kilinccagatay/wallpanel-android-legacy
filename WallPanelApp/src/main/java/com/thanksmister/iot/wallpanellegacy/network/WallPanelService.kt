@@ -211,10 +211,12 @@ class WallPanelService : LifecycleService(), MQTTModule.MQTTListener {
         }
 
     /**
-     * Dim screen, most devices won't go below 5
+     * Keep just enough panel light for the front camera to resolve motion.
+     * On the Denver TAC-70051, level 5 leaves the camera effectively blind;
+     * level 20 is the lowest value verified to wake reliably in this setup.
      */
     private val dimScreen = Runnable {
-        changeScreenBrightness(5)
+        changeScreenBrightness(MOTION_DIM_BRIGHTNESS)
         timerActive = false
     }
 
@@ -861,6 +863,7 @@ class WallPanelService : LifecycleService(), MQTTModule.MQTTListener {
         const val BROADCAST_EVENT_SCREEN_TOUCH = "BROADCAST_EVENT_SCREEN_TOUCH"
         const val SCREEN_WAKE_TIME = 30000L
         const val MOTION_WAKE_BRIGHTNESS = 191 // 75% of the Android 0..255 range
+        const val MOTION_DIM_BRIGHTNESS = 20
         const val BROADCAST_ALERT_MESSAGE = "BROADCAST_ALERT_MESSAGE"
         const val BROADCAST_CLEAR_ALERT_MESSAGE = "BROADCAST_CLEAR_ALERT_MESSAGE"
         const val BROADCAST_TOAST_MESSAGE = "BROADCAST_TOAST_MESSAGE"
