@@ -70,7 +70,7 @@
     <string name="key_setting_camera_motionwake">setting_camera_motionwake</string>
     <string name="default_setting_camera_motionleniency">20</string>
     <string name="key_setting_camera_motionminluma">setting_camera_motionminluma</string>
-    <string name="default_setting_camera_processinginterval">333</string>
+    <string name="default_setting_camera_processinginterval">250</string>
     <string name="key_setting_camera_motionleniency">setting_camera_motionleniency</string>
     <string name="default_setting_camera_motionenabled">false</string>
     <string name="key_setting_camera_processinginterval">setting_camera_processinginterval</string>
@@ -104,7 +104,7 @@
     <string name="default_browser_user_agent">""</string>
 
     <string name="key_setting_camera_fps">setting_camera_fps</string>
-    <string name="default_camera_fps">3</string>
+    <string name="default_camera_fps">4</string>
 
     <string name="key_setting_motion_clear">setting_motion_clear</string>
     <string name="default_motion_clear">30</string>

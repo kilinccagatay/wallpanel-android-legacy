@@ -208,7 +208,7 @@ constructor(private val context: Context, private val sharedPreferences: SharedP
             getStringPref(R.string.key_setting_camera_processinginterval,
                     R.string.default_setting_camera_processinginterval).trim().toLong().coerceAtLeast(0L)
         } catch (e: Exception) {
-            333L
+            250L
         }
 
     val testZoomLevel: Float
