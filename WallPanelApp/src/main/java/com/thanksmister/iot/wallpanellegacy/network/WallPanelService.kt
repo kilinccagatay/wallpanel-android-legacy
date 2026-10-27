@@ -61,7 +61,6 @@ import dagger.android.AndroidInjection
 import org.json.JSONException
 import org.json.JSONObject
 import timber.log.Timber
-import java.io.File
 import java.io.IOException
 import java.nio.ByteBuffer
 import java.util.*
@@ -631,24 +630,10 @@ class WallPanelService : LifecycleService(), MQTTModule.MQTTListener {
                 }
                 if (brightness in 0..255) {
                     Settings.System.putInt(contentResolver, Settings.System.SCREEN_BRIGHTNESS, brightness)
-                    requestRootBacklight(brightness)
                 }
             } catch (e: SecurityException) {
                 Timber.e(e.message)
             }
-        }
-    }
-
-    private fun requestRootBacklight(brightness: Int) {
-        try {
-            val trigger = if (brightness <= MOTION_OFF_THRESHOLD) {
-                BACKLIGHT_OFF_TRIGGER
-            } else {
-                BACKLIGHT_ON_TRIGGER
-            }
-            File(Environment.getExternalStorageDirectory(), trigger).createNewFile()
-        } catch (error: Exception) {
-            Timber.e(error, "Unable to request rooted backlight state")
         }
     }
 
@@ -898,8 +883,6 @@ class WallPanelService : LifecycleService(), MQTTModule.MQTTListener {
         const val MOTION_DIM_BRIGHTNESS = 0
         const val MOTION_OFF_THRESHOLD = 5
         const val MANUAL_OFF_MOTION_GRACE_MS = 2000L
-        private const val BACKLIGHT_ON_TRIGGER = ".wallpanel-backlight-on"
-        private const val BACKLIGHT_OFF_TRIGGER = ".wallpanel-backlight-off"
         const val BROADCAST_ALERT_MESSAGE = "BROADCAST_ALERT_MESSAGE"
         const val BROADCAST_CLEAR_ALERT_MESSAGE = "BROADCAST_CLEAR_ALERT_MESSAGE"
         const val BROADCAST_TOAST_MESSAGE = "BROADCAST_TOAST_MESSAGE"

@@ -6,8 +6,6 @@ TOOL=/system/xbin/sunxi-displayctl
 SETTINGS_DB=/data/data/com.android.providers.settings/databases/settings.db
 MAX_LEVEL=191
 SCRIPT_PATH=/system/xbin/wallpanel-backlight
-ON_TRIGGER=/mnt/sdcard/.wallpanel-backlight-on
-OFF_TRIGGER=/mnt/sdcard/.wallpanel-backlight-off
 
 if [ -f "$PIDFILE" ]; then
     OLD_PID=$(cat "$PIDFILE" 2>/dev/null)
@@ -21,85 +19,45 @@ fi
 echo $$ > "$PIDFILE"
 trap 'busybox rm -f "$PIDFILE"' EXIT
 trap 'exit 0' INT TERM
-busybox rm -f "$ON_TRIGGER" "$OFF_TRIGGER"
 
 read_android_brightness() {
     sqlite3 "$SETTINGS_DB" \
         "select value from system where name='screen_brightness';" 2>/dev/null
 }
 
-turn_lcd_on() {
-    LEVEL=$1
-    HARDWARE_LEVEL=$LEVEL
-    if [ "$HARDWARE_LEVEL" -gt "$MAX_LEVEL" ]; then
-        HARDWARE_LEVEL=$MAX_LEVEL
-    fi
-    "$TOOL" on
-    "$TOOL" "$HARDWARE_LEVEL"
-    echo "$(date) android=$LEVEL lcd=on hardware=$HARDWARE_LEVEL" >> "$LOGFILE"
-    LAST_LEVEL=$LEVEL
-    OFF_REASSERT_COUNT=0
-}
-
-turn_lcd_off() {
-    "$TOOL" off
-    echo "$(date) android=0 lcd=off camera=active" >> "$LOGFILE"
-    LAST_LEVEL=0
-    OFF_REASSERT_COUNT=0
-}
-
 LAST_LEVEL=-1
 OFF_REASSERT_COUNT=0
-POLL_TICKS=10
 while true; do
-    # WallPanel writes these trigger files immediately after changing Android's
-    # brightness. Handle them within 100 ms; retain the slower settings poll as
-    # a fallback for boot, external changes, and missed triggers.
-    if [ -f "$OFF_TRIGGER" ]; then
-        busybox rm -f "$OFF_TRIGGER" "$ON_TRIGGER"
-        turn_lcd_off
-    elif [ -f "$ON_TRIGGER" ]; then
-        busybox rm -f "$ON_TRIGGER"
-        LEVEL=$(read_android_brightness)
-        if [ -n "$LEVEL" ] && [ "$LEVEL" -gt 5 ]; then
-            turn_lcd_on "$LEVEL"
-        fi
-    fi
+    LEVEL=$(read_android_brightness)
 
-    if [ "$POLL_TICKS" -ge 10 ]; then
-        POLL_TICKS=0
-        LEVEL=$(read_android_brightness)
-    else
-        LEVEL=""
-    fi
-
-    if [ -n "$LEVEL" ] && [ "$LEVEL" != "$LAST_LEVEL" ]; then
+    if [ -n "$LEVEL" ]; then
         if [ "$LEVEL" -le 5 ]; then
             # Keep Android and the camera pipeline awake, but power down the
             # Allwinner LCD controller itself. Reassert periodically because a
             # window or USB event can turn the panel back on without changing
             # Android's stored brightness value.
-            if [ "$LEVEL" != "$LAST_LEVEL" ]; then
+            if [ "$LEVEL" != "$LAST_LEVEL" ] || [ "$OFF_REASSERT_COUNT" -ge 5 ]; then
                 "$TOOL" off
                 OFF_REASSERT_COUNT=0
-                echo "$(date) android=$LEVEL lcd=off camera=active" >> "$LOGFILE"
+                if [ "$LEVEL" != "$LAST_LEVEL" ]; then
+                    echo "$(date) android=$LEVEL lcd=off camera=active" >> "$LOGFILE"
+                fi
             fi
+            OFF_REASSERT_COUNT=$((OFF_REASSERT_COUNT + 1))
         else
-            turn_lcd_on "$LEVEL"
+            OFF_REASSERT_COUNT=0
+            if [ "$LEVEL" != "$LAST_LEVEL" ]; then
+                HARDWARE_LEVEL=$LEVEL
+                if [ "$HARDWARE_LEVEL" -gt "$MAX_LEVEL" ]; then
+                    HARDWARE_LEVEL=$MAX_LEVEL
+                fi
+                "$TOOL" on
+                "$TOOL" "$HARDWARE_LEVEL"
+                echo "$(date) android=$LEVEL lcd=on hardware=$HARDWARE_LEVEL" >> "$LOGFILE"
+            fi
         fi
         LAST_LEVEL=$LEVEL
     fi
 
-    # Reassert LCD_OFF every five seconds because USB/window events can power
-    # the panel without changing Android's stored brightness.
-    if [ "$LAST_LEVEL" -le 5 ]; then
-        OFF_REASSERT_COUNT=$((OFF_REASSERT_COUNT + 1))
-        if [ "$OFF_REASSERT_COUNT" -ge 50 ]; then
-            "$TOOL" off
-            OFF_REASSERT_COUNT=0
-        fi
-    fi
-
-    POLL_TICKS=$((POLL_TICKS + 1))
-    busybox usleep 100000
+    sleep 1
 done
