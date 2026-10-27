@@ -24,10 +24,13 @@ import android.content.IntentFilter
 import android.os.Build
 import android.os.BatteryManager
 import android.os.Bundle
+import android.os.Environment
+import android.os.Handler
 import android.support.v4.content.LocalBroadcastManager
 import android.view.KeyEvent
 import android.view.View
 import android.view.ViewTreeObserver
+import android.view.ViewConfiguration
 import android.view.WindowManager
 import android.widget.Toast
 import com.thanksmister.iot.wallpanellegacy.R
@@ -40,6 +43,7 @@ import com.thanksmister.iot.wallpanellegacy.utils.DialogUtils
 import com.thanksmister.iot.wallpanellegacy.ui.views.BatteryBadgeView
 import dagger.android.support.DaggerAppCompatActivity
 import timber.log.Timber
+import java.io.File
 import javax.inject.Inject
 
 abstract class BrowserActivity : DaggerAppCompatActivity() {
@@ -52,6 +56,21 @@ abstract class BrowserActivity : DaggerAppCompatActivity() {
     private var decorView: View? = null
     private var batteryBadge: BatteryBadgeView? = null
     private var batteryReceiverRegistered = false
+    private val powerKeyHandler = Handler()
+    private var powerKeyLongPressed = false
+    private val powerKeyLongPress = Runnable {
+        powerKeyLongPressed = true
+        try {
+            // A CAMERA-mapped key can reach the app while the Allwinner LCD is
+            // physically off. Wake the panel before the root helper opens the
+            // system power dialog so the user can actually see it.
+            resetScreen()
+            File(Environment.getExternalStorageDirectory(), POWER_MENU_TRIGGER).createNewFile()
+            Timber.d("Dashboard power key long press requested")
+        } catch (error: Exception) {
+            Timber.e(error, "Unable to request the Android power menu")
+        }
+    }
     var displayProgress = true
     var zoomLevel = 1.0f
 
@@ -200,13 +219,20 @@ abstract class BrowserActivity : DaggerAppCompatActivity() {
 
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
         // The Denver's physical power key is remapped to CAMERA by the rooted
-        // panel profile. Consuming it here prevents Android's legacy camera
-        // stack from being torn down by a real screen-off while still giving
-        // the enclosure button a reliable dashboard-wake action.
+        // panel profile. A short press toggles only the physical LCD so the
+        // legacy camera remains active. A long press asks the root helper to
+        // inject a real held POWER key, preserving Android's global power menu.
         if (event.keyCode == KeyEvent.KEYCODE_CAMERA) {
             if (event.action == KeyEvent.ACTION_DOWN && event.repeatCount == 0) {
-                Timber.d("Dashboard wake key pressed")
-                resetScreen()
+                powerKeyLongPressed = false
+                powerKeyHandler.postDelayed(
+                        powerKeyLongPress, ViewConfiguration.getLongPressTimeout().toLong())
+            } else if (event.action == KeyEvent.ACTION_UP) {
+                powerKeyHandler.removeCallbacks(powerKeyLongPress)
+                if (!powerKeyLongPressed) {
+                    Timber.d("Dashboard power key short press")
+                    toggleScreen()
+                }
             }
             return true
         }
@@ -224,6 +250,12 @@ abstract class BrowserActivity : DaggerAppCompatActivity() {
         Timber.d("resetScreen Called")
         val intent = Intent(WallPanelService.BROADCAST_EVENT_SCREEN_TOUCH)
         intent.putExtra(WallPanelService.BROADCAST_EVENT_SCREEN_TOUCH, true)
+        val bm = LocalBroadcastManager.getInstance(applicationContext)
+        bm.sendBroadcast(intent)
+    }
+
+    private fun toggleScreen() {
+        val intent = Intent(WallPanelService.BROADCAST_EVENT_POWER_TOGGLE)
         val bm = LocalBroadcastManager.getInstance(applicationContext)
         bm.sendBroadcast(intent)
     }
@@ -249,5 +281,6 @@ abstract class BrowserActivity : DaggerAppCompatActivity() {
         const val BROADCAST_ACTION_JS_EXEC = "BROADCAST_ACTION_JS_EXEC"
         const val BROADCAST_ACTION_CLEAR_BROWSER_CACHE = "BROADCAST_ACTION_CLEAR_BROWSER_CACHE"
         const val BROADCAST_ACTION_RELOAD_PAGE = "BROADCAST_ACTION_RELOAD_PAGE"
+        private const val POWER_MENU_TRIGGER = ".wallpanel-power-longpress"
     }
 }

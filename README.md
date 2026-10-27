@@ -63,8 +63,28 @@ camera pipeline alive while the hardware LCD is off.
 The rooted profile also installs
 [`device-root/axp20-supplyer.kl`](device-root/axp20-supplyer.kl). It remaps the
 enclosure power button from Android `POWER` to `CAMERA`; WallPanel consumes that
-key as a dashboard-wake request. A short press therefore turns the LCD on
-without putting Android to sleep or closing the legacy camera driver.
+key as a camera-safe power toggle. A short press turns the LCD off or on without
+putting Android to sleep or closing the legacy camera driver. Motion detection
+can still wake the display after a manual short-press shutdown, and every wake
+starts the same 30-second inactivity timer used by camera motion.
+
+A long press preserves the ROM's original power-off menu. WallPanel writes a
+trigger to shared storage, and the rooted
+[`device-root/wallpanel-power-menu`](device-root/wallpanel-power-menu) service
+uses [`device-root/PowerLongPress.java`](device-root/PowerLongPress.java) to
+inject a trusted held `POWER` event. Build its small dex jar with a Java 8 JDK,
+an Android SDK containing the legacy `dx` tool, and:
+
+```sh
+ANDROID_HOME=/path/to/android-sdk device-root/build-power-helper.sh
+```
+
+Install the resulting `wallpanel-power.jar` as
+`/system/framework/wallpanel-power.jar`, and install the service script as
+`/system/xbin/wallpanel-power-menu`. The Denver boot hook starts it
+automatically. The helper exists because allowing Android to process the raw
+short `POWER` event would enter real screen sleep and stop this tablet's camera
+driver.
 
 Apply that persistent Android 4.1 setting as root through the settings provider:
 

@@ -55,6 +55,13 @@ if [ -x /system/xbin/wallpanel-runtime-optimizer ]; then
         >/data/local/tmp/wallpanel-runtime-optimizer-boot.log 2>&1 &
 fi
 
+# Preserve Android's original long-press power menu while the physical PMIC
+# key is remapped to CAMERA for camera-safe short presses.
+if [ -x /system/xbin/wallpanel-power-menu ]; then
+    busybox nohup /system/xbin/wallpanel-power-menu \
+        >/data/local/tmp/wallpanel-power-menu-boot.log 2>&1 &
+fi
+
 # The rooted firmware mounts /system read-write during boot. The installed
 # panel services need no further writes there, so restore it to read-only.
 busybox mount -o remount,ro /dev/block/nandd /system 2>/dev/null || true

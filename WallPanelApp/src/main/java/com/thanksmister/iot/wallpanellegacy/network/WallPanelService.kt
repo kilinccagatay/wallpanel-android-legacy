@@ -86,6 +86,7 @@ class WallPanelService : LifecycleService(), MQTTModule.MQTTListener {
     private var audioPlayerBusy: Boolean = false
     private val brightTimer = Handler()
     private var timerActive = false
+    private var motionWakeSuppressedUntil = 0L
     private var httpServer: AsyncHttpServer? = null
     private val mBinder = WallPanelServiceBinder()
     private val motionClearHandler = Handler()
@@ -157,6 +158,7 @@ class WallPanelService : LifecycleService(), MQTTModule.MQTTListener {
         val filter = IntentFilter()
         filter.addAction(BROADCAST_EVENT_URL_CHANGE)
         filter.addAction(BROADCAST_EVENT_SCREEN_TOUCH)
+        filter.addAction(BROADCAST_EVENT_POWER_TOGGLE)
         filter.addAction(Intent.ACTION_SCREEN_ON)
         filter.addAction(Intent.ACTION_SCREEN_OFF)
         filter.addAction(Intent.ACTION_USER_PRESENT)
@@ -799,7 +801,20 @@ class WallPanelService : LifecycleService(), MQTTModule.MQTTListener {
             } else if (BROADCAST_EVENT_SCREEN_TOUCH == intent.action) {
                 Timber.i("Screen touched")
                 if (configuration.cameraMotionBright) {
-                    setBrightScreen(255)
+                    setBrightScreen(MOTION_WAKE_BRIGHTNESS)
+                }
+                publishMessage(COMMAND_STATE, state.toString())
+            } else if (BROADCAST_EVENT_POWER_TOGGLE == intent.action) {
+                if (screenBrightness <= MOTION_OFF_THRESHOLD) {
+                    Timber.i("Physical power key: LCD on")
+                    setBrightScreen(MOTION_WAKE_BRIGHTNESS)
+                } else {
+                    Timber.i("Physical power key: LCD off, camera remains active")
+                    brightTimer.removeCallbacks(dimScreen)
+                    timerActive = false
+                    motionWakeSuppressedUntil = SystemClock.elapsedRealtime() +
+                            MANUAL_OFF_MOTION_GRACE_MS
+                    changeScreenBrightness(MOTION_DIM_BRIGHTNESS)
                 }
                 publishMessage(COMMAND_STATE, state.toString())
             }
@@ -821,6 +836,11 @@ class WallPanelService : LifecycleService(), MQTTModule.MQTTListener {
         }
         override fun onMotionDetected() {
             Timber.i("Motion detected")
+            if (SystemClock.elapsedRealtime() < motionWakeSuppressedUntil) {
+                Timber.d("Motion wake ignored during manual-off grace period")
+                publishMotionDetected()
+                return
+            }
             if (configuration.cameraMotionWake) {
                 switchScreenOn()
             }
@@ -857,9 +877,12 @@ class WallPanelService : LifecycleService(), MQTTModule.MQTTListener {
         const val ONGOING_NOTIFICATION_ID = 1
         const val BROADCAST_EVENT_URL_CHANGE = "BROADCAST_EVENT_URL_CHANGE"
         const val BROADCAST_EVENT_SCREEN_TOUCH = "BROADCAST_EVENT_SCREEN_TOUCH"
+        const val BROADCAST_EVENT_POWER_TOGGLE = "BROADCAST_EVENT_POWER_TOGGLE"
         const val SCREEN_WAKE_TIME = 30000L
         const val MOTION_WAKE_BRIGHTNESS = 191 // 75% of the Android 0..255 range
         const val MOTION_DIM_BRIGHTNESS = 0
+        const val MOTION_OFF_THRESHOLD = 5
+        const val MANUAL_OFF_MOTION_GRACE_MS = 2000L
         const val BROADCAST_ALERT_MESSAGE = "BROADCAST_ALERT_MESSAGE"
         const val BROADCAST_CLEAR_ALERT_MESSAGE = "BROADCAST_CLEAR_ALERT_MESSAGE"
         const val BROADCAST_TOAST_MESSAGE = "BROADCAST_TOAST_MESSAGE"
