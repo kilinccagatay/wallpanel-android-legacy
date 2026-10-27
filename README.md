@@ -60,6 +60,12 @@ motion can no longer wake the device. For this dedicated panel,
 `stay_on_while_plugged_in` must therefore remain `3` (AC and USB) to keep the
 camera pipeline alive while the hardware LCD is off.
 
+The rooted profile also installs
+[`device-root/axp20-supplyer.kl`](device-root/axp20-supplyer.kl). It remaps the
+enclosure power button from Android `POWER` to `CAMERA`; WallPanel consumes that
+key as a dashboard-wake request. A short press therefore turns the LCD on
+without putting Android to sleep or closing the legacy camera driver.
+
 Apply that persistent Android 4.1 setting as root through the settings provider:
 
 ```sh

@@ -5,12 +5,15 @@ LOGFILE=/data/local/tmp/wallpanel-backlight.log
 TOOL=/system/xbin/sunxi-displayctl
 SETTINGS_DB=/data/data/com.android.providers.settings/databases/settings.db
 MAX_LEVEL=191
+SCRIPT_PATH=/system/xbin/wallpanel-backlight
 
 if [ -f "$PIDFILE" ]; then
     OLD_PID=$(cat "$PIDFILE" 2>/dev/null)
-    if [ -n "$OLD_PID" ] && kill -0 "$OLD_PID" 2>/dev/null; then
+    if [ -n "$OLD_PID" ] && kill -0 "$OLD_PID" 2>/dev/null && \
+            busybox grep -q "$SCRIPT_PATH" "/proc/$OLD_PID/cmdline" 2>/dev/null; then
         exit 0
     fi
+    busybox rm -f "$PIDFILE"
 fi
 
 echo $$ > "$PIDFILE"

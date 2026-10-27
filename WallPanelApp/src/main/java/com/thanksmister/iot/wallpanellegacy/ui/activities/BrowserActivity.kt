@@ -199,6 +199,17 @@ abstract class BrowserActivity : DaggerAppCompatActivity() {
     }
 
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        // The Denver's physical power key is remapped to CAMERA by the rooted
+        // panel profile. Consuming it here prevents Android's legacy camera
+        // stack from being torn down by a real screen-off while still giving
+        // the enclosure button a reliable dashboard-wake action.
+        if (event.keyCode == KeyEvent.KEYCODE_CAMERA) {
+            if (event.action == KeyEvent.ACTION_DOWN && event.repeatCount == 0) {
+                Timber.d("Dashboard wake key pressed")
+                resetScreen()
+            }
+            return true
+        }
         if (event.keyCode == KeyEvent.KEYCODE_BACK) {
             Timber.d("dispatchKeyEvent")
             window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)

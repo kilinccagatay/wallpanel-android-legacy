@@ -4,6 +4,7 @@ PIDFILE=/data/local/tmp/wallpanel-runtime-optimizer.pid
 LOGFILE=/data/local/tmp/wallpanel-runtime-optimizer.log
 PACKAGE=com.thanksmister.iot.wallpanellegacy
 SWEEP_TICKS=30
+SCRIPT_PATH=/system/xbin/wallpanel-runtime-optimizer
 
 UNUSED_PACKAGES="
 com.android.providers.calendar
@@ -35,9 +36,11 @@ yuku.mp3recorder.full
 
 if [ -f "$PIDFILE" ]; then
     OLD_PID=$(cat "$PIDFILE" 2>/dev/null)
-    if [ -n "$OLD_PID" ] && kill -0 "$OLD_PID" 2>/dev/null; then
+    if [ -n "$OLD_PID" ] && kill -0 "$OLD_PID" 2>/dev/null && \
+            busybox grep -q "$SCRIPT_PATH" "/proc/$OLD_PID/cmdline" 2>/dev/null; then
         exit 0
     fi
+    busybox rm -f "$PIDFILE"
 fi
 
 echo $$ > "$PIDFILE"
