@@ -34,7 +34,7 @@ executable, and launch it from the device's root boot hook
 (`install-recovery.sh` on the Denver firmware):
 
 ```sh
-busybox nohup /system/xbin/wallpanel-runtime-optimizer \
+busybox setsid /system/xbin/wallpanel-runtime-optimizer </dev/null \
     >/data/local/tmp/wallpanel-runtime-optimizer-boot.log 2>&1 &
 ```
 

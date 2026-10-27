@@ -46,31 +46,35 @@ fi
 # restore SettingsActivity instead, which has no camera surface for motion wake.
 am start -n com.thanksmister.iot.wallpanellegacy/.ui.activities.BrowserActivityLegacy
 
+# `install-recovery.sh` runs as a one-shot init service on this ROM. Put each
+# long-lived helper in a new session so init does not kill it when this script
+# exits after boot.
+
 # Keep Android logically awake for WallPanel's camera, but switch the LCD
 # panel fully off whenever WallPanel enters its minimum-brightness state.
 if [ -x /system/xbin/wallpanel-backlight ]; then
-    busybox nohup /system/xbin/wallpanel-backlight \
+    busybox setsid /system/xbin/wallpanel-backlight </dev/null \
         >/data/local/tmp/wallpanel-backlight-boot.log 2>&1 &
 fi
 
 # Recover the dashboard after a low-memory kill and recycle Crosswalk before
 # its gradual memory leak can exhaust this tablet's limited RAM.
 if [ -x /system/xbin/wallpanel-watchdog ]; then
-    busybox nohup /system/xbin/wallpanel-watchdog \
+    busybox setsid /system/xbin/wallpanel-watchdog </dev/null \
         >/data/local/tmp/wallpanel-watchdog-boot.log 2>&1 &
 fi
 
 # Reclaim RAM and background I/O from apps that are unnecessary while the
 # dedicated Home Assistant dashboard is running.
 if [ -x /system/xbin/wallpanel-runtime-optimizer ]; then
-    busybox nohup /system/xbin/wallpanel-runtime-optimizer \
+    busybox setsid /system/xbin/wallpanel-runtime-optimizer </dev/null \
         >/data/local/tmp/wallpanel-runtime-optimizer-boot.log 2>&1 &
 fi
 
 # Preserve Android's original long-press power menu while the physical PMIC
 # key is remapped to CAMERA for camera-safe short presses.
 if [ -x /system/xbin/wallpanel-power-menu ]; then
-    busybox nohup /system/xbin/wallpanel-power-menu \
+    busybox setsid /system/xbin/wallpanel-power-menu </dev/null \
         >/data/local/tmp/wallpanel-power-menu-boot.log 2>&1 &
 fi
 
@@ -78,7 +82,7 @@ fi
 # SystemUI service stopped during kiosk use, while allowing WallPanel's battery
 # badge to expose it temporarily through explicit show/hide triggers.
 if [ -x /system/xbin/wallpanel-systemui ]; then
-    busybox nohup /system/xbin/wallpanel-systemui \
+    busybox setsid /system/xbin/wallpanel-systemui </dev/null \
         >/data/local/tmp/wallpanel-systemui-boot.log 2>&1 &
 fi
 
