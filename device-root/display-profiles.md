@@ -1,0 +1,36 @@
+# Denver display profiles
+
+These root helpers use Allwinner sun5i display ioctls verified on the reference
+Denver tablet. They are not portable Android display controls.
+
+`wallpanel-backlight` reads `/data/local/wallpanel-display-mode` at startup:
+
+| File value | When Android brightness is at most 5 |
+| --- | --- |
+| `backlight-only` | Keep the LCD image/controller on and request hardware brightness 0 |
+| `lcd-off` (also the default for an absent/unknown value) | Request the prior LCD-off behavior |
+
+The current charger-powered reference uses **backlight-only**. The previous
+LCD-off profile remains available for rollback. Neither profile puts Android
+into suspend. Both preserve camera motion processing and cap wake brightness
+at 191/255 (about 75%). WallPanel continues to own the 30-second inactivity
+timer and short power-key toggle; the helper follows its brightness setting.
+
+To select a profile on the verified rooted device, write its exact value to
+the mode file and restart the backlight helper, or reboot. The mode file lives
+on the data partition and survives reboot; the existing boot launcher starts
+the same helper. No APK or firmware image replacement is needed.
+
+Before switching, privately back up the installed helper, boot launcher, key
+layout, application preferences, and SettingsProvider database. Those backups
+may contain credentials and must never be committed. Reverting the mode to
+`lcd-off` and restarting the helper restores the prior display behavior without
+changing the app's camera, brightness, timeout, or dashboard configuration.
+
+The legacy LCD-off profile periodically reasserts LCD off after window/USB
+events. Backlight-only changes hardware brightness only when Android's setting
+changes, avoiding redundant zero writes and LCD reinitialization. Logs identify
+the selected mode and requested dark state. A successful ioctl/log is
+not a measurement of actual display power or backlight output; verify visually
+on the target device. An image visible under external light is expected with
+`backlight-only`.

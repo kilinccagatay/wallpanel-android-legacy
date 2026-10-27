@@ -6,6 +6,13 @@ TOOL=/system/xbin/sunxi-displayctl
 SETTINGS_DB=/data/data/com.android.providers.settings/databases/settings.db
 MAX_LEVEL=191
 SCRIPT_PATH=/system/xbin/wallpanel-backlight
+MODE_FILE=/data/local/wallpanel-display-mode
+# Preserve the existing LCD-off profile unless explicitly selected otherwise.
+DISPLAY_MODE=$(cat "$MODE_FILE" 2>/dev/null)
+case "$DISPLAY_MODE" in
+    backlight-only) ;;
+    *) DISPLAY_MODE=lcd-off ;;
+esac
 
 if [ -f "$PIDFILE" ]; then
     OLD_PID=$(cat "$PIDFILE" 2>/dev/null)
@@ -25,6 +32,10 @@ read_android_brightness() {
         "select value from system where name='screen_brightness';" 2>/dev/null
 }
 
+# Transition out of the old LCD-off profile once. In backlight-only mode,
+# subsequent transitions must never reinitialize or repeatedly poke the LCD.
+if [ "$DISPLAY_MODE" = backlight-only ]; then "$TOOL" on; fi
+
 LAST_LEVEL=-1
 OFF_REASSERT_COUNT=0
 while true; do
@@ -32,15 +43,20 @@ while true; do
 
     if [ -n "$LEVEL" ]; then
         if [ "$LEVEL" -le 5 ]; then
-            # Keep Android and the camera pipeline awake, but power down the
-            # Allwinner LCD controller itself. Reassert periodically because a
-            # window or USB event can turn the panel back on without changing
-            # Android's stored brightness value.
-            if [ "$LEVEL" != "$LAST_LEVEL" ] || [ "$OFF_REASSERT_COUNT" -ge 5 ]; then
-                "$TOOL" off
+            # Both profiles keep Android and the camera awake. The optional
+            # mains-powered profile leaves the LCD image active and sets only
+            # its backlight to zero. Reassert only the legacy LCD-off profile:
+            # avoid redundant brightness writes in the backlight-only profile.
+            if [ "$LEVEL" != "$LAST_LEVEL" ] || \
+                    { [ "$DISPLAY_MODE" = lcd-off ] && [ "$OFF_REASSERT_COUNT" -ge 5 ]; }; then
+                if [ "$DISPLAY_MODE" = backlight-only ]; then
+                    "$TOOL" 0
+                else
+                    "$TOOL" off
+                fi
                 OFF_REASSERT_COUNT=0
                 if [ "$LEVEL" != "$LAST_LEVEL" ]; then
-                    echo "$(date) android=$LEVEL lcd=off camera=active" >> "$LOGFILE"
+                    echo "$(date) android=$LEVEL mode=$DISPLAY_MODE dark=1 camera=active" >> "$LOGFILE"
                 fi
             fi
             OFF_REASSERT_COUNT=$((OFF_REASSERT_COUNT + 1))
@@ -51,7 +67,7 @@ while true; do
                 if [ "$HARDWARE_LEVEL" -gt "$MAX_LEVEL" ]; then
                     HARDWARE_LEVEL=$MAX_LEVEL
                 fi
-                "$TOOL" on
+                if [ "$DISPLAY_MODE" = lcd-off ]; then "$TOOL" on; fi
                 "$TOOL" "$HARDWARE_LEVEL"
                 echo "$(date) android=$LEVEL lcd=on hardware=$HARDWARE_LEVEL" >> "$LOGFILE"
             fi
