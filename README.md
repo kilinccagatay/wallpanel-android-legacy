@@ -12,11 +12,11 @@ detector result no longer retains the full camera frame, reducing memory growth.
 Motion comparison uses a quarter-resolution luma sample in each dimension,
 reducing the detector's pixel workload to one sixteenth while preserving the
 coarse 10-by-10 motion regions used by the original algorithm.
-This Denver profile defaults to `2 FPS` with a `500 ms` processing interval,
-giving roughly half-second motion response while keeping the camera workload
-low. On the test tablet, the sampled detector reduced WallPanel CPU use from
-about 17% to 5% at this rate; zero-backlight current was about 501 mA versus
-about 494 mA at 1 FPS / 1000 ms.
+This mains-powered Denver profile defaults to `3 FPS` with a `333 ms`
+processing interval. It reduces the maximum wait between analyzed frames by
+about one third compared with the previous 2 FPS profile, without doubling the
+camera workload as 4 FPS would. Quarter-resolution sampling keeps the detector
+light enough for the tablet's older processor.
 
 ### Optional rooted-device runtime optimizer
 
@@ -354,7 +354,7 @@ app.launchUrl | URL | The URL the Dashboard launches at | Tutorial Webpage
 app.showActivity | true/false | On-screen indication of browser activity | true
 camera.cameraId | int | The camera ID to attach to | 0
 camera.motionEnabled | true/false | If the device camera is used for motion detection | false
-camera.motionCheckInterval | int | The interval the camera is polled for motion in milliseconds | 500
+camera.motionCheckInterval | int | The interval the camera is polled for motion in milliseconds | 333
 camera.motionLeniency | int | The leniency on changes in pictures between polls | 20
 camera.motionMinLuma | int | The minimum light needed to perform motion detection | 1000
 camera.motionWake | true/false | If motion activity should wake the device | true
