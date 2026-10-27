@@ -7,6 +7,7 @@ SETTINGS_DB=/data/data/com.android.providers.settings/databases/settings.db
 MAX_LEVEL=191
 SCRIPT_PATH=/system/xbin/wallpanel-backlight
 MODE_FILE=/data/local/wallpanel-display-mode
+BACKLIGHT_GATE=/sys/bus/i2c/devices/0-0034/axp20-gpio.29
 # Preserve the existing LCD-off profile unless explicitly selected otherwise.
 DISPLAY_MODE=$(cat "$MODE_FILE" 2>/dev/null)
 case "$DISPLAY_MODE" in
@@ -32,9 +33,35 @@ read_android_brightness() {
         "select value from system where name='screen_brightness';" 2>/dev/null
 }
 
+# On this Denver, script.fex assigns lcd_bl_en to AXP20 GPIO1 (power1).
+# GPIO0 is LCD power and must never be changed. Use the existing GPIO driver,
+# preserve its selector, and refuse to reconfigure an unexpected input pin.
+set_backlight_gate() {
+    PREVIOUS_GPIO=$(cat "$BACKLIGHT_GATE/gpio" 2>/dev/null) || return 1
+    echo 1 > "$BACKLIGHT_GATE/gpio" || return 1
+    GATE_IO=$(cat "$BACKLIGHT_GATE/io" 2>/dev/null)
+    if [ "$GATE_IO" != 1 ]; then
+        echo "$PREVIOUS_GPIO" > "$BACKLIGHT_GATE/gpio"
+        return 1
+    fi
+    echo "$1" > "$BACKLIGHT_GATE/value"
+    GATE_RESULT=$?
+    echo "$PREVIOUS_GPIO" > "$BACKLIGHT_GATE/gpio"
+    return "$GATE_RESULT"
+}
+
 # Transition out of the old LCD-off profile once. In backlight-only mode,
 # subsequent transitions must never reinitialize or repeatedly poke the LCD.
-if [ "$DISPLAY_MODE" = backlight-only ]; then "$TOOL" on; fi
+if [ "$DISPLAY_MODE" = backlight-only ]; then
+    if [ ! -w "$BACKLIGHT_GATE/value" ]; then
+        echo "$(date) backlight-only: required AXP20 GPIO interface missing" >> "$LOGFILE"
+        exit 1
+    fi
+    "$TOOL" on
+elif [ -f "$MODE_FILE" ] && [ -w "$BACKLIGHT_GATE/value" ]; then
+    # Reverting an explicitly configured device must reopen the backlight gate.
+    set_backlight_gate 1
+fi
 
 LAST_LEVEL=-1
 OFF_REASSERT_COUNT=0
@@ -50,6 +77,10 @@ while true; do
             if [ "$LEVEL" != "$LAST_LEVEL" ] || \
                     { [ "$DISPLAY_MODE" = lcd-off ] && [ "$OFF_REASSERT_COUNT" -ge 5 ]; }; then
                 if [ "$DISPLAY_MODE" = backlight-only ]; then
+                    set_backlight_gate 0 || {
+                        echo "$(date) backlight-only: unable to close light gate" >> "$LOGFILE"
+                        exit 1
+                    }
                     "$TOOL" 0
                 else
                     "$TOOL" off
@@ -69,6 +100,12 @@ while true; do
                 fi
                 if [ "$DISPLAY_MODE" = lcd-off ]; then "$TOOL" on; fi
                 "$TOOL" "$HARDWARE_LEVEL"
+                if [ "$DISPLAY_MODE" = backlight-only ]; then
+                    set_backlight_gate 1 || {
+                        echo "$(date) backlight-only: unable to open light gate" >> "$LOGFILE"
+                        exit 1
+                    }
+                fi
                 echo "$(date) android=$LEVEL lcd=on hardware=$HARDWARE_LEVEL" >> "$LOGFILE"
             fi
         fi

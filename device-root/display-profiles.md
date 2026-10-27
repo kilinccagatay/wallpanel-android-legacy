@@ -7,10 +7,18 @@ Denver tablet. They are not portable Android display controls.
 
 | File value | When Android brightness is at most 5 |
 | --- | --- |
-| `backlight-only` | Keep the LCD image/controller on and request hardware brightness 0 |
+| `backlight-only` | Keep the LCD image/controller on, close its separate backlight-enable gate, and request hardware brightness 0 |
 | `lcd-off` (also the default for an absent/unknown value) | Request the prior LCD-off behavior |
 
-The current charger-powered reference uses **backlight-only**. The previous
+The current charger-powered reference uses **backlight-only**. Brightness zero
+alone did not eliminate a low-light shimmer on the reference unit. Its verified
+`script.fex` maps `lcd_bl_en` to AXP20 GPIO1 (`power1`), separate from LCD power
+on GPIO0 (`power0`). The helper closes/opens only GPIO1 through the existing
+`axp20-gpio` sysfs interface, checks that it is already an output, and preserves
+the sysfs GPIO selector. Do not use this profile on another board without
+verifying its wiring and pin configuration. It must not switch GPIO0.
+
+The previous
 LCD-off profile remains available for rollback. Neither profile puts Android
 into suspend. Both preserve camera motion processing and cap wake brightness
 at 191/255 (about 75%). WallPanel continues to own the 30-second inactivity
