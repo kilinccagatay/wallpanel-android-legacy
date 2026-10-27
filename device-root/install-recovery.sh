@@ -30,8 +30,9 @@ if dumpsys window | busybox grep -q 'mCurrentFocus=.*Keyguard'; then
     sleep 2
 fi
 
-# Ensure the configured WallPanel dashboard is in the foreground.
-am start -n com.thanksmister.iot.wallpanellegacy/.ui.activities.WelcomeActivity
+# Open the legacy browser directly. Reusing WelcomeActivity's existing task can
+# restore SettingsActivity instead, which has no camera surface for motion wake.
+am start -n com.thanksmister.iot.wallpanellegacy/.ui.activities.BrowserActivityLegacy
 
 # Keep Android logically awake for WallPanel's camera, but switch the LCD
 # panel fully off whenever WallPanel enters its minimum-brightness state.

@@ -3,7 +3,10 @@
 PIDFILE=/data/local/tmp/wallpanel-watchdog.pid
 LOGFILE=/data/local/tmp/wallpanel-watchdog.log
 PACKAGE=com.thanksmister.iot.wallpanellegacy
-ACTIVITY=$PACKAGE/.ui.activities.WelcomeActivity
+# Start the browser directly. Bringing WelcomeActivity's existing task forward
+# can leave SettingsActivity on top, which destroys the camera preview and
+# makes motion wake impossible until the browser is opened again.
+ACTIVITY=$PACKAGE/.ui.activities.BrowserActivityLegacy
 SETTINGS_DB=/data/data/com.android.providers.settings/databases/settings.db
 MAX_RSS_KB=180000
 MIN_DARK_SECONDS=300
@@ -41,6 +44,13 @@ uptime_seconds() {
 }
 
 start_dashboard() {
+    # This Android 4.1 ROM can expose its swipe keyguard even though WallPanel
+    # disables it. MENU dismisses that insecure keyguard before the browser is
+    # brought forward.
+    if dumpsys window 2>/dev/null | busybox grep -q 'mCurrentFocus=.*Keyguard'; then
+        input keyevent 82 >/dev/null 2>&1
+        sleep 2
+    fi
     am start -n "$ACTIVITY" >/dev/null 2>&1
     log_message "$1"
     sleep 12
@@ -65,10 +75,14 @@ while true; do
     else
         FOCUS=$(dumpsys window 2>/dev/null | busybox grep 'mCurrentFocus=' | busybox head -1)
 
-        # After an app/low-memory crash Android returns to the launcher while
-        # WallPanel's background service may be restarted without its Activity.
-        if echo "$FOCUS" | busybox grep -q 'com.android.launcher'; then
-            start_dashboard "launcher_visible: dashboard_started"
+        # The process can remain alive while SettingsActivity or the keyguard
+        # is on top. SettingsActivity has no camera preview; the legacy camera
+        # service then closes and motion can no longer wake the display. Keep
+        # the dedicated tablet on BrowserActivityLegacy, regardless of which
+        # non-dashboard window displaced it.
+        if ! echo "$FOCUS" | busybox grep -q \
+                "$PACKAGE/$PACKAGE.ui.activities.BrowserActivityLegacy"; then
+            start_dashboard "dashboard_not_focused: focus=$FOCUS dashboard_started"
         else
             RSS_KB=$(busybox awk '/VmRSS:/ {print $2}' "/proc/$APP_PID/status" 2>/dev/null)
             DARK_SECONDS=0
