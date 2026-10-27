@@ -17,6 +17,7 @@
 package com.thanksmister.iot.wallpanellegacy.ui.activities
 
 import android.annotation.SuppressLint
+import android.app.ProgressDialog
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
@@ -28,6 +29,7 @@ import android.os.Environment
 import android.os.Handler
 import android.support.v4.content.LocalBroadcastManager
 import android.view.KeyEvent
+import android.view.MotionEvent
 import android.view.View
 import android.view.ViewTreeObserver
 import android.view.ViewConfiguration
@@ -55,7 +57,22 @@ abstract class BrowserActivity : DaggerAppCompatActivity() {
     private var wallPanelService: Intent? = null
     private var decorView: View? = null
     private var batteryBadge: BatteryBadgeView? = null
+    private var systemBarProgress: ProgressDialog? = null
     private var batteryReceiverRegistered = false
+    private val systemUiHandler = Handler()
+    private var systemBarVisible = false
+    private val rehideSystemBar = Runnable {
+        if (!systemBarVisible) {
+            applySystemBarVisibility()
+        }
+    }
+    private val autoHideSystemBar = Runnable {
+        systemBarVisible = false
+        dismissSystemBarProgress()
+        requestRootSystemBar(false)
+        applySystemBarVisibility()
+        scheduleSystemBarRehide()
+    }
     private val powerKeyHandler = Handler()
     private var powerKeyLongPressed = false
     private val powerKeyLongPress = Runnable {
@@ -129,6 +146,19 @@ abstract class BrowserActivity : DaggerAppCompatActivity() {
         window.addFlags(WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON)
 
         decorView = window.decorView
+        decorView?.setOnSystemUiVisibilityChangeListener { visibility ->
+            if (!systemBarVisible &&
+                    visibility and View.SYSTEM_UI_FLAG_HIDE_NAVIGATION == 0) {
+                // Android 4.1's lean-back mode reveals the navigation bar on
+                // any touch. Reapply the requested hidden state after the tap
+                // has reached the dashboard.
+                // Jelly Bean finishes revealing the legacy SystemBar well
+                // after this callback returns. Reapply once after that touch
+                // cycle; repeatedly restarting a short retry prevents the
+                // request from ever reaching the ROM's reliable threshold.
+                scheduleSystemBarRehide()
+            }
+        }
 
         if(configuration.cameraEnabled || configuration.hasCameraDetections() && Build.VERSION.SDK_INT > Build.VERSION_CODES.LOLLIPOP_MR1) {
             window.setFlags(WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED, WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED)
@@ -145,7 +175,25 @@ abstract class BrowserActivity : DaggerAppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
+        systemUiHandler.removeCallbacks(autoHideSystemBar)
+        systemBarVisible = false
+        requestRootSystemBar(false)
         batteryBadge = findViewById<View>(R.id.battery_badge) as BatteryBadgeView
+        batteryBadge?.setOnLongClickListener {
+            systemBarVisible = !systemBarVisible
+            systemUiHandler.removeCallbacks(rehideSystemBar)
+            requestRootSystemBar(systemBarVisible)
+            applySystemBarVisibility()
+            if (systemBarVisible) {
+                showSystemBarProgress()
+                systemUiHandler.postDelayed(
+                        autoHideSystemBar, SYSTEM_BAR_AUTO_HIDE_DELAY_MS)
+            } else {
+                dismissSystemBarProgress()
+                systemUiHandler.removeCallbacks(autoHideSystemBar)
+            }
+            true
+        }
         if (!batteryReceiverRegistered) {
             val batteryIntent = registerReceiver(
                     batteryReceiver, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
@@ -164,10 +212,20 @@ abstract class BrowserActivity : DaggerAppCompatActivity() {
         filter.addAction(BROADCAST_TOAST_MESSAGE)
         val bm = LocalBroadcastManager.getInstance(this)
         bm.registerReceiver(mBroadcastReceiver, filter)
+        // Some Android 4.1 builds do not deliver a fresh focus callback when
+        // this activity is restored. Enforce the requested kiosk state on
+        // every resume instead of relying on onWindowFocusChanged alone.
+        applySystemBarVisibility()
+        scheduleSystemBarRehide()
     }
 
     override fun onPause() {
         super.onPause()
+        // If the user leaves WallPanel through the temporarily visible Android
+        // controls, leave SystemUI available outside the kiosk. onResume()
+        // requests the hidden kiosk state again when WallPanel returns.
+        systemUiHandler.removeCallbacks(autoHideSystemBar)
+        dismissSystemBarProgress()
         if (batteryReceiverRegistered) {
             unregisterReceiver(batteryReceiver)
             batteryReceiverRegistered = false
@@ -193,28 +251,85 @@ abstract class BrowserActivity : DaggerAppCompatActivity() {
 
     override fun onWindowFocusChanged(hasFocus: Boolean) {
         super.onWindowFocusChanged(hasFocus)
-        val visibility: Int
-        if (hasFocus ) {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT) {
-                visibility = (View.SYSTEM_UI_FLAG_LAYOUT_STABLE
-                        or View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
-                        or View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
-                        or View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
-                        or View.SYSTEM_UI_FLAG_FULLSCREEN
-                        or View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY)
-            } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN) {
-                visibility = (View.SYSTEM_UI_FLAG_LAYOUT_STABLE
-                        or View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
-                        or View.SYSTEM_UI_FLAG_LOW_PROFILE
-                        or View.SYSTEM_UI_FLAG_FULLSCREEN)
-
-            } else {
-                visibility = (View.SYSTEM_UI_FLAG_HIDE_NAVIGATION)
-                window.setFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN,
-                        WindowManager.LayoutParams.FLAG_FULLSCREEN)
-            }
-            decorView?.systemUiVisibility = visibility
+        if (hasFocus) {
+            applySystemBarVisibility()
         }
+    }
+
+    private fun applySystemBarVisibility() {
+        if (systemBarVisible) {
+            decorView?.systemUiVisibility = View.SYSTEM_UI_FLAG_VISIBLE
+            return
+        }
+
+        val visibility: Int
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT) {
+            visibility = (View.SYSTEM_UI_FLAG_LAYOUT_STABLE
+                    or View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
+                    or View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
+                    or View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
+                    or View.SYSTEM_UI_FLAG_FULLSCREEN
+                    or View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY)
+        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN) {
+            visibility = (View.SYSTEM_UI_FLAG_LAYOUT_STABLE
+                    or View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
+                    or View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
+                    or View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
+                    or View.SYSTEM_UI_FLAG_LOW_PROFILE
+                    or View.SYSTEM_UI_FLAG_FULLSCREEN)
+        } else {
+            visibility = View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
+            window.setFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN,
+                    WindowManager.LayoutParams.FLAG_FULLSCREEN)
+        }
+        decorView?.systemUiVisibility = visibility
+    }
+
+    private fun scheduleSystemBarRehide() {
+        systemUiHandler.removeCallbacks(rehideSystemBar)
+        systemUiHandler.postDelayed(rehideSystemBar, SYSTEM_BAR_REHIDE_DELAY_MS)
+    }
+
+    private fun requestRootSystemBar(show: Boolean) {
+        try {
+            val trigger = if (show) SYSTEM_BAR_SHOW_TRIGGER else SYSTEM_BAR_HIDE_TRIGGER
+            File(Environment.getExternalStorageDirectory(), trigger).createNewFile()
+        } catch (error: Exception) {
+            Timber.e(error, "Unable to request rooted SystemUI state")
+        }
+    }
+
+    @Suppress("DEPRECATION")
+    private fun showSystemBarProgress() {
+        dismissSystemBarProgress()
+        systemBarProgress = ProgressDialog(this).apply {
+            setMessage("Android kontrolleri açılıyor…")
+            setIndeterminate(true)
+            setCancelable(false)
+            show()
+        }
+        systemUiHandler.postDelayed(
+                { dismissSystemBarProgress() }, SYSTEM_BAR_PROGRESS_DELAY_MS)
+    }
+
+    private fun dismissSystemBarProgress() {
+        if (systemBarProgress?.isShowing == true && !isFinishing) {
+            systemBarProgress?.dismiss()
+        }
+        systemBarProgress = null
+    }
+
+    override fun dispatchTouchEvent(event: MotionEvent): Boolean {
+        val handled = super.dispatchTouchEvent(event)
+        if (!systemBarVisible) {
+            // ViewRootImpl clears Jelly Bean's HIDE_NAVIGATION bit immediately
+            // before dispatching a touch to the Activity. Restore it after the
+            // dashboard has received the same event but before the next frame
+            // can draw the SystemBar.
+            systemUiHandler.removeCallbacks(rehideSystemBar)
+            applySystemBarVisibility()
+        }
+        return handled
     }
 
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
@@ -282,5 +397,10 @@ abstract class BrowserActivity : DaggerAppCompatActivity() {
         const val BROADCAST_ACTION_CLEAR_BROWSER_CACHE = "BROADCAST_ACTION_CLEAR_BROWSER_CACHE"
         const val BROADCAST_ACTION_RELOAD_PAGE = "BROADCAST_ACTION_RELOAD_PAGE"
         private const val POWER_MENU_TRIGGER = ".wallpanel-power-longpress"
+        private const val SYSTEM_BAR_REHIDE_DELAY_MS = 700L
+        private const val SYSTEM_BAR_AUTO_HIDE_DELAY_MS = 12000L
+        private const val SYSTEM_BAR_PROGRESS_DELAY_MS = 2500L
+        private const val SYSTEM_BAR_SHOW_TRIGGER = ".wallpanel-systemui-show"
+        private const val SYSTEM_BAR_HIDE_TRIGGER = ".wallpanel-systemui-hide"
     }
 }

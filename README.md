@@ -86,6 +86,52 @@ automatically. The helper exists because allowing Android to process the raw
 short `POWER` event would enter real screen sleep and stop this tablet's camera
 driver.
 
+### Kiosk SystemBar control
+
+WallPanel starts with Android's bottom SystemBar hidden so the dashboard uses
+the full 800 x 480 display. Long-press the native battery badge to show the
+Android navigation controls for twelve seconds; WallPanel then returns to kiosk
+mode automatically. A short loading dialog covers SystemUI's cold-start delay.
+The badge is placed on the edge opposite the SystemBar so
+it remains reachable while the controls are open; the timeout is an additional
+escape path. This gesture is intentionally attached to the badge rather than
+the dashboard, so Home Assistant cards keep their normal tap and hold behavior.
+
+Android 4.1 reveals its legacy SystemBar after an ordinary screen touch even
+when an app requests lean-back mode. The rooted
+[`device-root/wallpanel-systemui`](device-root/wallpanel-systemui) helper stops
+the SystemUI service while WallPanel is in kiosk mode, so ordinary dashboard
+touches cannot reveal the bar at all. SystemUI remains disabled during kiosk
+use because this ROM otherwise restarts the service unpredictably. The boot
+hook explicitly re-enables and starts SystemUI before launching WallPanel on
+every reboot, then starts the kiosk helper. ADB is initialized first to preserve
+a recovery path. Trigger files from the battery badge explicitly start or stop
+the service.
+
+Build the Android 4.1-compatible Binder helper with an installed Android SDK:
+
+```sh
+ANDROID_HOME=/path/to/android-sdk device-root/build-systemui-helper.sh
+```
+
+Install the resulting `wallpanel-systemui.jar` as
+`/system/framework/wallpanel-systemui.jar`, and install the service script as
+`/system/xbin/wallpanel-systemui`. The Denver boot hook starts it
+automatically. If the kiosk helper ever needs to be bypassed from an ADB shell,
+restore the stock controls with:
+
+```sh
+su 0 pm enable com.android.systemui
+su 0 am startservice -n com.android.systemui/.SystemUIService
+```
+
+The application visibility flags remain as a non-root fallback and restore the
+hidden state after a touch completes. The rooted boot hook also disables the
+ROM's window and transition animations so fallback restoration does not
+produce a long slide-in animation. WallPanel requests kiosk mode whenever it is
+started or resumed. If the user leaves WallPanel through the temporary Android
+controls, SystemUI remains available in the other app until WallPanel resumes.
+
 Apply that persistent Android 4.1 setting as root through the settings provider:
 
 ```sh

@@ -20,8 +20,20 @@ while [ "$WAIT_COUNT" -lt 60 ]; do
     WAIT_COUNT=$((WAIT_COUNT + 1))
 done
 
+# The kiosk helper leaves SystemUI disabled so Android 4.1 cannot resurrect its
+# touch-triggered bar. Restore the package at the beginning of every boot; ADB
+# is already available above if manual recovery is ever needed.
+pm enable com.android.systemui >/dev/null 2>&1
+am startservice -n com.android.systemui/.SystemUIService >/dev/null 2>&1
+
 # Give the launcher, keyguard, and WallPanel boot receiver time to settle.
 sleep 12
+
+# Android 4.1 briefly animates its tablet SystemBar back into view after every
+# touch, even when the foreground app immediately requests HIDE_NAVIGATION.
+# Disable those legacy transition animations for a stable kiosk surface.
+sqlite3 /data/data/com.android.providers.settings/databases/settings.db \
+    "update system set value='0.0' where name in ('window_animation_scale','transition_animation_scale');"
 
 # Denver's Android 4.1 ROM shows the insecure swipe keyguard even when disabled.
 # Dismiss it only when it is actually the focused window.
@@ -60,6 +72,14 @@ fi
 if [ -x /system/xbin/wallpanel-power-menu ]; then
     busybox nohup /system/xbin/wallpanel-power-menu \
         >/data/local/tmp/wallpanel-power-menu-boot.log 2>&1 &
+fi
+
+# Android 4.1's SystemBar is revealed by every application touch. Keep the
+# SystemUI service stopped during kiosk use, while allowing WallPanel's battery
+# badge to expose it temporarily through explicit show/hide triggers.
+if [ -x /system/xbin/wallpanel-systemui ]; then
+    busybox nohup /system/xbin/wallpanel-systemui \
+        >/data/local/tmp/wallpanel-systemui-boot.log 2>&1 &
 fi
 
 # The rooted firmware mounts /system read-write during boot. The installed
