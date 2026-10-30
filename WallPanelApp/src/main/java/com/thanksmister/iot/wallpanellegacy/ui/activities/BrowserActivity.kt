@@ -147,7 +147,7 @@ abstract class BrowserActivity : DaggerAppCompatActivity() {
 
         decorView = window.decorView
         decorView?.setOnSystemUiVisibilityChangeListener { visibility ->
-            if (!systemBarVisible &&
+            if (!systemBarVisible && !usesRootLegacySystemBar() &&
                     visibility and View.SYSTEM_UI_FLAG_HIDE_NAVIGATION == 0) {
                 // Android 4.1's lean-back mode reveals the navigation bar on
                 // any touch. Reapply the requested hidden state after the tap
@@ -270,6 +270,15 @@ abstract class BrowserActivity : DaggerAppCompatActivity() {
                     or View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
                     or View.SYSTEM_UI_FLAG_FULLSCREEN
                     or View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY)
+        } else if (usesRootLegacySystemBar()) {
+            // Jelly Bean creates a TYPE_HIDDEN_NAV_CONSUMER input window for
+            // HIDE_NAVIGATION. It consumes the next touch before our Activity.
+            // The installed root helper already owns actual SystemUI visibility;
+            // request only stable layout/fullscreen, never the touch consumer.
+            visibility = (View.SYSTEM_UI_FLAG_LAYOUT_STABLE
+                    or View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
+                    or View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
+                    or View.SYSTEM_UI_FLAG_FULLSCREEN)
         } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN) {
             visibility = (View.SYSTEM_UI_FLAG_LAYOUT_STABLE
                     or View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
@@ -284,6 +293,15 @@ abstract class BrowserActivity : DaggerAppCompatActivity() {
         }
         decorView?.systemUiVisibility = visibility
     }
+
+    private val rootLegacySystemBar by lazy {
+        Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN &&
+                Build.VERSION.SDK_INT < Build.VERSION_CODES.KITKAT &&
+                File("/system/xbin/wallpanel-systemui").canExecute() &&
+                File("/system/framework/wallpanel-systemui.jar").isFile
+    }
+
+    private fun usesRootLegacySystemBar(): Boolean = rootLegacySystemBar
 
     private fun scheduleSystemBarRehide() {
         systemUiHandler.removeCallbacks(rehideSystemBar)
@@ -321,7 +339,7 @@ abstract class BrowserActivity : DaggerAppCompatActivity() {
 
     override fun dispatchTouchEvent(event: MotionEvent): Boolean {
         val handled = super.dispatchTouchEvent(event)
-        if (!systemBarVisible) {
+        if (!systemBarVisible && !usesRootLegacySystemBar()) {
             // ViewRootImpl clears Jelly Bean's HIDE_NAVIGATION bit immediately
             // before dispatching a touch to the Activity. Restore it after the
             // dashboard has received the same event but before the next frame

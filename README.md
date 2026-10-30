@@ -88,6 +88,9 @@ driver.
 
 ### Kiosk SystemBar control
 
+Build 8 fixes first-tap loss on rooted Jelly Bean devices without changing the
+dashboard. See the [diagnosis, fix, and validation notes](docs/first-touch-fix.md).
+
 WallPanel starts with Android's bottom SystemBar hidden so the dashboard uses
 the full 800 x 480 display. Long-press the native battery badge to show the
 Android navigation controls for twelve seconds; WallPanel then returns to kiosk
