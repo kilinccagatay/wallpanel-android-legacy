@@ -29,6 +29,19 @@ the mode file and restart the backlight helper, or reboot. The mode file lives
 on the data partition and survives reboot; the existing boot launcher starts
 the same helper. No APK or firmware image replacement is needed.
 
+### Helper recovery
+
+The app's 30-second inactivity timer writes Android brightness 0. The root
+backlight helper must also be alive to close the physical backlight gate.
+A PID file alone is insufficient: it can remain after a process disappears.
+If brightness reaches 0 but the light stays on, verify the recorded process
+exists and its command matches `wallpanel-backlight` before changing app timers.
+
+The boot launcher now remains running and checks the five installed panel
+helpers every 30 seconds. It restarts a missing helper after validating its PID
+and command, preserving the selected display profile and app preferences.
+This is process recovery, separate from the app's inactivity timeout.
+
 Before switching, privately back up the installed helper, boot launcher, key
 layout, application preferences, and SettingsProvider database. Those backups
 may contain credentials and must never be committed. Reverting the mode to

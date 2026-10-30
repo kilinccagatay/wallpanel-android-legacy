@@ -89,3 +89,22 @@ fi
 # The rooted firmware mounts /system read-write during boot. The installed
 # panel services need no further writes there, so restore it to read-only.
 busybox mount -o remount,ro /dev/block/nandd /system 2>/dev/null || true
+
+# Keep this init service alive and recover helpers that disappear. A stale PID
+# file is not proof of a running helper: verify both the process and command.
+# This also avoids depending solely on detached children of a one-shot service.
+while true; do
+    for HELPER_NAME in backlight watchdog runtime-optimizer power-menu systemui; do
+        HELPER_PATH=/system/xbin/wallpanel-$HELPER_NAME
+        HELPER_PID=$(cat /data/local/tmp/wallpanel-$HELPER_NAME.pid 2>/dev/null)
+        if [ -n "$HELPER_PID" ] && kill -0 "$HELPER_PID" 2>/dev/null && \
+                busybox grep -q "$HELPER_PATH" "/proc/$HELPER_PID/cmdline" 2>/dev/null; then
+            continue
+        fi
+        if [ -x "$HELPER_PATH" ]; then
+            busybox setsid "$HELPER_PATH" </dev/null \
+                >"/data/local/tmp/wallpanel-$HELPER_NAME-boot.log" 2>&1 &
+        fi
+    done
+    sleep 30
+done
