@@ -630,11 +630,18 @@ class WallPanelService : LifecycleService(), MQTTModule.MQTTListener {
                 }
                 if (brightness in 0..255) {
                     Settings.System.putInt(contentResolver, Settings.System.SCREEN_BRIGHTNESS, brightness)
+                    if (brightness == 0) notifyDashboardDark()
                 }
             } catch (e: SecurityException) {
                 Timber.e(e.message)
             }
         }
+    }
+
+    // A backlight-only dim does not produce Android visibility/screen-off events.
+    // Keep this UI notification separate from brightness, power and camera policy.
+    private fun notifyDashboardDark() {
+        evalJavascript("window.dispatchEvent(new Event('panel-display-dark'));")
     }
 
     private fun setBrightScreen(brightness: Int) {
@@ -796,6 +803,7 @@ class WallPanelService : LifecycleService(), MQTTModule.MQTTListener {
             } else if (Intent.ACTION_SCREEN_OFF == intent.action ||
                     intent.action == Intent.ACTION_SCREEN_ON ||
                     intent.action == Intent.ACTION_USER_PRESENT) {
+                if (Intent.ACTION_SCREEN_OFF == intent.action) notifyDashboardDark()
                 Timber.i("Screen state changed")
                 publishMessage(COMMAND_STATE, state.toString())
             } else if (BROADCAST_EVENT_SCREEN_TOUCH == intent.action) {
