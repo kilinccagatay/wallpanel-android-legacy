@@ -377,3 +377,14 @@ mqtt.sensorFrequency | Int | The frequency to post sensor data in seconds, or 0 
 ## Credits
 
 WallPanel (Formerly HomeDash) is a fork from the [original WallPanel project](https://github.com/WallPanel-Project/wallpanel-android) developed by [quadportnick](https://github.com/quadportnick).
+
+
+## Optional Samsung computer-aware display
+
+A Samsung-only rooted helper can use the MacCallIndicator heartbeat to switch
+from idle backlight dimming to full display-off while the Mac is unreachable,
+and restore normal mode when reports resume. See the
+[setup, behavior, test evidence and rollback guide](docs/samsung-computer-display.md).
+
+Manual power-off camera wake remains a [tracked TODO](docs/samsung-display-todo.md);
+the complete device acceptance gate is not yet passed.
