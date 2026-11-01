@@ -6,18 +6,36 @@ Samsung SM-J510FN / Android 6 only. Denver's APK, settings and root helpers were
 not changed. The previous Samsung APK was copied on-device before installation;
 preferences and initial rotation settings were backed up privately.
 
-The system initially had auto-rotation enabled and natural/portrait rotation.
-After setting auto-rotation off and rotation 1, the active panel still requested
-portrait. The Samsung package now filters orientation requests inside the browser
-activity, including later embedded-component requests. Other package profiles
-retain the requested orientation. This does not alter camera settings, brightness,
-power keys, navigation lock, dashboard mappings or authentication.
+Build 14's application orientation guard passed app relaunches but failed a real
+reboot. Build 15 adds explicit landscape declarations to the Samsung startup and
+browser activities; this alone also failed the subsequent real reboot. The
+window token requested landscape (0), while Samsung's window policy retained
+portrait (1), even with auto-rotation disabled and user rotation 1.
 
-Development Samsung Build 14 includes this guard. The model/API-guarded
-[`samsung-orientation-lock.sh`](../device-root/samsung-orientation-lock.sh) is
-installed as a one-shot boot service named `92-samsung-orientation-lock.sh`.
-It waits at most two minutes for boot completion, writes persistent Android
-rotation settings and exits; it is not another polling daemon.
+A controlled 30-second root orientation window changed SurfaceOrientation to 1;
+removing it returned orientation 0. The final Samsung-only workaround uses a
+transparent 1 × 1 system overlay requesting landscape. It has NOT_FOCUSABLE and
+NOT_TOUCHABLE flags: it neither captures touches nor changes display power.
+It holds the system orientation while running, including outside the panel.
+It does not use sensors, timers or a polling loop. A local socket prevents a
+second instance. The model/API guards reject anything except SM-J510FN/API 23.
+No new application permission was requested. Denver is unchanged.
+
+Build with `ANDROID_HOME` and JDK 8 using
+`sh device-root/build-samsung-landscape-helper.sh`. Install the resulting
+`samsung-landscape.jar` under `/data/local/tmp/`, then install
+[`samsung-orientation-lock.sh`](../device-root/samsung-orientation-lock.sh) as
+`/data/adb/service.d/89-samsung-orientation-lock.sh` with mode 755. Remove the
+previous 92 orientation entry after privately backing it up. The boot entry
+returns immediately, waits at most two minutes in its worker, restores rotation
+settings, then starts the idle helper; it cannot block later service.d entries.
+
+Rollback: remove only the 89 entry, terminate the matching
+`com.thanksmister.iot.wallpanellegacy.root.SamsungLandscapeGuard` process, and
+restore the previous rotation settings/APK if desired. Termination automatically
+removes the orientation window. Existing Wi-Fi ADB and display helpers are not
+modified. The helper's memory footprint on this device was about 46 MB RSS;
+its main loop waits for events rather than polling.
 
 DiagMonAgent was identified as `com.sec.android.diagmonagent`, version 4.1.15,
 in the system's `priv-app` directory. User 0 now has `enabled=3` (disabled-user)
@@ -33,14 +51,14 @@ Do not copy these changes to Denver or disable unrelated system packages.
 
 ## Acceptance record
 
-Actual reboot/power-cycle persistence is PENDING. The batteryless phone has not
-been rebooted as part of this change. A successful build or application restart
-is not a cold-boot test. Full device acceptance remains PENDING until every
+The user restarted the batteryless phone after the final orientation helper
+was installed and confirmed that it opened correctly in landscape. This verifies
+the reported orientation symptom, not every post-boot feature. Full device acceptance remains PENDING until every
 applicable item in the mandatory checklist has physical evidence.
 
 | ID | Status | Evidence / remaining check |
 | --- | --- | --- |
-| D01 | PENDING | Application-start orientation is tested separately; actual cold boot still pending. |
+| D01 | PENDING | Final helper: user confirmed actual reboot opened correctly. Touch/lock acceptance still pending. |
 | D02 | PENDING | Not repeated on this installed revision; previous behavior is not full acceptance. |
 | D03 | PENDING | Not repeated on this installed revision; previous behavior is not full acceptance. |
 | D04 | PENDING | Not repeated on this installed revision; previous behavior is not full acceptance. |
@@ -51,9 +69,9 @@ applicable item in the mandatory checklist has physical evidence.
 | D09 | N/A | The office phone does not configure a native battery overlay. |
 | D10 | N/A | The office phone does not configure a native battery overlay. |
 | D11 | PENDING | Not repeated on this installed revision; previous behavior is not full acceptance. |
-| D12 | PENDING | No reboot performed; boot-service setup is not a reboot persistence test. |
+| D12 | PENDING | Actual user reboot opened correctly; post-boot timeout/wake/power/first-tap checks pending. |
 | D13 | PENDING | Not repeated on this installed revision; previous behavior is not full acceptance. |
-| D14 | PASS | Build 14 retained all user preferences; only Chromium internal resource version changed. |
+| D14 | PENDING | Preference backup retained; final Build 15 post-boot comparison pending. |
 | U01 | N/A | Samsung uses the separate office layout rather than the Denver Home reference. |
 | U02 | PENDING | Not repeated on this installed revision; previous behavior is not full acceptance. |
 | U03 | PENDING | Not repeated on this installed revision; previous behavior is not full acceptance. |
@@ -72,11 +90,11 @@ applicable item in the mandatory checklist has physical evidence.
 | H09 | PENDING | Not repeated on this installed revision; previous behavior is not full acceptance. |
 | H10 | PENDING | Not repeated on this installed revision; previous behavior is not full acceptance. |
 | E01 | PASS | Clean Samsung flavor debug build passed under JDK 8 with offline dependencies; shell syntax check passed. |
-| E02 | PASS | Installed Samsung Build 14; two force-stop/relaunch cycles each returned SurfaceOrientation=1 and app orientation=0. Actual frame is 1280×720. |
-| E03 | PASS | Only the new guard/script/guide are selected; private configuration and unrelated working-tree changes excluded. |
-| E04 | PASS | Only the intended guard, boot script and this guide were committed/pushed; remaining device checks explicitly PENDING. |
+| E02 | PASS | Build 15 alone failed real boot; final orientation helper returned SurfaceOrientation=1. User confirmed final helper opened correctly after real reboot. |
+| E03 | PASS | Only the orientation changes and guide are selected; private configuration and unrelated working-tree changes excluded. |
+| E04 | PASS | Only intended orientation helper/script/guide selected; all remaining physical checks explicitly PENDING. |
 
-The two application-restart tests are **not** actual phone reboots.
+Build 14 and manifest-only Build 15 both failed actual boot tests; their relaunch evidence must not be used as reboot acceptance.
 DiagMonAgent remained disabled-user/stopped after both. Home and settings opened
 in landscape; the wider complete physical-feature gate remains PENDING.
 
