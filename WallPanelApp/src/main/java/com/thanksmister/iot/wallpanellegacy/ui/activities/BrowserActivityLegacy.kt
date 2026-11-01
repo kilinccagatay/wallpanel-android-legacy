@@ -59,6 +59,11 @@ class BrowserActivityLegacy : BrowserActivity() {
 
         xWebView = findViewById<View>(R.id.activity_browser_webview_legacy) as XWalkView
         xWebView!!.visibility = View.VISIBLE
+        if (packageName.endsWith(".samsung")) {
+            // Crosswalk delegates native selection long-clicks here. Consume
+            // only its copy/context action; DOM touch timers still reach lamps.
+            xWebView!!.setOnLongClickListener { true }
+        }
         xWebView!!.setResourceClient(object : XWalkResourceClient(xWebView) {
             var snackbar: Snackbar
 
