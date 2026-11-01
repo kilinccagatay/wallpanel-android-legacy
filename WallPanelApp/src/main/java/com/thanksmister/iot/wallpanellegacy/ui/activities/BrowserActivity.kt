@@ -133,6 +133,13 @@ abstract class BrowserActivity : DaggerAppCompatActivity() {
         }
     }
 
+    // Crosswalk can request portrait after startup. Keep the office flavor
+    // landscape even when an embedded component changes its orientation.
+    override fun setRequestedOrientation(requestedOrientation: Int) {
+        super.setRequestedOrientation(if (packageName.endsWith(".samsung"))
+            android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE else requestedOrientation)
+    }
+
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
 
