@@ -157,3 +157,25 @@ See [the focused TODO and its acceptance criteria](samsung-display-todo.md).
 The full acceptance gate remains FAIL/PENDING; this is not a clean general
 regression pass. Real Mac sleep/shutdown and phone cold-boot persistence remain
 unverified despite the successful isolated heartbeat test.
+
+
+## Explicit Mac lock/display state — 0.4.1
+
+Mac Call Indicator now has an independent computer-active channel. The meeting
+sensor must not be used as the computer's on/off state. Update the receiver and
+point this helper at the separate computer sensor, adding `"computer_state": true`
+to its private JSON. Keep `stale_seconds` for missed final sleep/shutdown reports.
+See the companion [computer activity guide](https://github.com/kilinccagatay/mac-call-indicator/blob/codex/workday-agenda/docs/computer-activity.md).
+
+A fresh computer `off` requests full display-off after the app's ordinary idle
+brightness reaches zero. A fresh `on` wakes only a helper-owned sleeping screen.
+HA's 40-second entity-availability expiry is a grace period until the configured
+shutdown threshold; it must not momentarily wake an already sleeping screen.
+The legacy timestamp-only mode remains the default if `computer_state` is absent.
+No new Android APK, permission, display GPIO write or Denver change is required.
+
+The real Touch ID lock + Esc test on 2026-11-02 physically closed and reopened the
+Samsung display. Device telemetry matched `OFFLINE owned=true / Asleep / OFF`
+and `ONLINE owned=false` on return. The subsequent grace-path hardening is covered
+by policy tests; its real system-sleep cycle and the full final regression gate
+remain PENDING. Do not treat this targeted result as full general acceptance.

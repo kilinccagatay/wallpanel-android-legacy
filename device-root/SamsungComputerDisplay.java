@@ -46,7 +46,7 @@ public final class SamsungComputerDisplay {
         while((line=r.readLine())!=null) if(line.contains("mCurrentFocus=")) found=line.contains("com.thanksmister.iot.wallpanellegacy.samsung/") && line.contains("BrowserActivity");
         r.close();p.waitFor();return found;
     }
-    private static long report(URL url) throws Exception {
+    private static ComputerDisplayPolicy.Presence report(URL url, long stale, boolean computerState) throws Exception {
         HttpURLConnection c=(HttpURLConnection)url.openConnection();
         c.setConnectTimeout(4000);c.setReadTimeout(4000);c.setUseCaches(false);c.setInstanceFollowRedirects(false);
         try {
@@ -54,7 +54,10 @@ public final class SamsungComputerDisplay {
             InputStream in=c.getInputStream();String text;try{text=read(in,8192);}finally{in.close();}
             JSONObject e=new JSONObject(text);
             if(!e.has("entity_id") || !e.has("attributes")) throw new IOException("invalid state");
-            return e.getJSONObject("attributes").optLong("last_report_epoch",0);
+            long seen=e.getJSONObject("attributes").optLong("last_report_epoch",0);
+            long now=System.currentTimeMillis()/1000;
+            return computerState?ComputerDisplayPolicy.computerPresence(now,seen,stale,e.optString("state",""))
+                    :ComputerDisplayPolicy.presence(now,seen,stale);
         }finally{c.disconnect();}
     }
     private static void status(String mode) {
@@ -70,6 +73,7 @@ public final class SamsungComputerDisplay {
         final URL url=new URL(cfg.getString("url"));
         if(!("http".equals(url.getProtocol())||"https".equals(url.getProtocol()))||url.getUserInfo()!=null) throw new IOException("invalid url");
         final long stale=Math.max(60,cfg.optLong("stale_seconds",120));
+        final boolean computerState=cfg.optBoolean("computer_state",false);
         final long runSeconds=args.length==2&&"--test-seconds".equals(args[0])?Math.max(10,Math.min(180,Long.parseLong(args[1]))):0;
         android.os.Looper.prepareMainLooper();
         Class<?> at=Class.forName("android.app.ActivityThread");Object thread=at.getMethod("systemMain").invoke(null);
@@ -79,18 +83,18 @@ public final class SamsungComputerDisplay {
         owned=OWNED.isFile();
         Runtime.getRuntime().addShutdownHook(new Thread(new Runnable(){public void run(){wakeOwned();}}));
         new Thread(new Runnable(){public void run(){
-            try{runPolicy(context,pm,url,stale,runSeconds);}catch(Exception failure){status("ERROR");System.err.println("Policy failure: "+failure.getClass().getSimpleName());for(StackTraceElement frame:failure.getStackTrace())System.err.println(frame.getClassName()+"."+frame.getMethodName()+":"+frame.getLineNumber());}
+            try{runPolicy(context,pm,url,stale,runSeconds,computerState);}catch(Exception failure){status("ERROR");System.err.println("Policy failure: "+failure.getClass().getSimpleName());for(StackTraceElement frame:failure.getStackTrace())System.err.println(frame.getClassName()+"."+frame.getMethodName()+":"+frame.getLineNumber());}
             finally{wakeOwned();System.exit(0);}
         }},"computer-display-policy").start();
         android.os.Looper.loop();
     }
-    private static void runPolicy(Context context,PowerManager pm,URL url,long stale,long runSeconds) throws Exception {
+    private static void runPolicy(Context context,PowerManager pm,URL url,long stale,long runSeconds,boolean computerState) throws Exception {
         long started=android.os.SystemClock.elapsedRealtime();int failures=0;
         try {
             while(runSeconds==0 || android.os.SystemClock.elapsedRealtime()-started<runSeconds*1000) {
                 if(owned){cpu.acquire(90000);if(pm.isInteractive()){owned=false;OWNED.delete();cpu.release();}}
                 ComputerDisplayPolicy.Presence presence;
-                try{presence=ComputerDisplayPolicy.presence(System.currentTimeMillis()/1000,report(url),stale);failures=0;}
+                try{presence=report(url,stale,computerState);failures=0;}
                 catch(Exception unavailable){presence=ComputerDisplayPolicy.Presence.UNKNOWN;failures++;}
                 if(presence==ComputerDisplayPolicy.Presence.ONLINE){wakeOwned();}
                 else if(presence==ComputerDisplayPolicy.Presence.UNKNOWN && failures!=1){wakeOwned();}
