@@ -2,7 +2,7 @@
 
 `device-root/wallpanel-watchdog` optionally sources
 `/system/xbin/wallpanel-http-recovery`, whose source is in this directory's parent
-`device-root/` folder. It checks the dashboard URL from the private root-owned
+`device-root/` folder. It checks the static-file health URL from the private root-owned
 mode-600 file `/data/local/tmp/wallpanel-recovery-url` on the existing watchdog's
 30-second loop. An explicit HTTP 404, or two transport failures, arms recovery.
 Two later healthy probes allow one foreground dashboard restart. A five-minute
@@ -19,3 +19,5 @@ record are maintained in the companion project's
 A live controlled probe outage/recovery was tested. Full reboot, power-key,
 physical timeout/wake, sound and long-run regression remain PENDING; the change
 is not fully accepted until `regression-checklist.md` is satisfied.
+
+For HoaryDash 0.13.0 configure the encoded static directory URL ending in `/dash%2f`, not `/dash/`. Normal dashboard requests warm unused WebSockets. The companion guide explains this tested, version-specific routing choice; the actual browser URL is unchanged.
