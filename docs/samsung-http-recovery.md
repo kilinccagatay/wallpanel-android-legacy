@@ -68,7 +68,8 @@ its dedicated worker, private URL and directory lock can be removed.
 | Acceptance checks | Status | Evidence / limit |
 | --- | --- | --- |
 | D01, D12 | PENDING | Magisk boot entry installed; phone cold boot not performed. |
-| D02–D08 | PENDING | Physical timeout/wake, dim-room cycles, power keys and first touch require user checks after this install. |
+| D02 | PASS | User confirmed the requested covered-camera 35-second darkening test after installation. |
+| D03–D08 | PENDING overall | User confirmed normal panel, camera wake at the requested 45% level and first touch. Dim-room/three-cycle/two-minute, power-key and full first-touch checks remain pending. |
 | D09–D10 | N/A | Samsung is batteryless, native battery badge intentionally disabled; navigation lock is a separate pending check. |
 | D11 | PASS for new helper | Duplicate launch and worker recovery tested; other helpers preserved, not deliberately crashed. |
 | D13 | PENDING | 30-minute/overnight observation not completed. |
@@ -84,3 +85,11 @@ its dedicated worker, private URL and directory lock can be removed.
 
 Overall: automatic recovery installed and exercised; **complete regression
 acceptance remains PENDING**. No claim of full boot or overnight reliability.
+
+### User confirmation
+
+After installation, the user answered “works” to the bundled check for normal
+panel appearance, covered-camera darkening after 35 seconds, camera wake at the
+requested 45% brightness and first touch. This is a positive single-cycle physical
+observation, not proof of cold-boot persistence or the complete regression gate.
+No runtime change followed this confirmation.
