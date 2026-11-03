@@ -56,6 +56,8 @@ start_dashboard() {
     sleep 12
 }
 
+[ ! -r /system/xbin/wallpanel-http-recovery ] || . /system/xbin/wallpanel-http-recovery
+
 DARK_SINCE=0
 while true; do
     APP_PID=$(busybox pidof "$PACKAGE" 2>/dev/null)
@@ -106,6 +108,10 @@ while true; do
                 DARK_SINCE=$(uptime_seconds)
             fi
         fi
+    fi
+
+    if command -v http_recovery_tick >/dev/null 2>&1; then
+        http_recovery_tick
     fi
 
     sleep 30
