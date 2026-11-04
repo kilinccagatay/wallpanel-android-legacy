@@ -3,6 +3,13 @@ package com.thanksmister.iot.wallpanellegacy.root;
 /** Epoch-based presence lease. Meeting on/off is deliberately irrelevant. */
 public final class ComputerDisplayPolicy {
     public enum Presence { ONLINE, GRACE, OFFLINE, UNKNOWN }
+    /** Camera activity must not postpone explicit computer-off indefinitely. */
+    public static boolean shouldSleep(Presence presence, boolean interactive,
+                                      boolean panelForeground, int brightness,
+                                      long offlineElapsedMillis) {
+        return presence == Presence.OFFLINE && interactive && panelForeground
+                && (brightness == 0 || offlineElapsedMillis >= 30000);
+    }
     public static Presence computerPresence(long now, long seen, long staleAfter, String state) {
         if("on".equals(state)) return presence(now,seen,staleAfter,Boolean.TRUE);
         if("off".equals(state)) return presence(now,seen,staleAfter,Boolean.FALSE);

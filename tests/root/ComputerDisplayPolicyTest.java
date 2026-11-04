@@ -20,6 +20,15 @@ public final class ComputerDisplayPolicyTest {
         if(ComputerDisplayPolicy.computerPresence(1000,950,120,"unavailable")!=ComputerDisplayPolicy.Presence.GRACE) throw new AssertionError("HA expiry must not wake an owned screen");
         if(ComputerDisplayPolicy.computerPresence(1000,880,120,"unavailable")!=ComputerDisplayPolicy.Presence.OFFLINE) throw new AssertionError("shutdown fallback");
         if(ComputerDisplayPolicy.computerPresence(1000,995,120,"unknown")!=ComputerDisplayPolicy.Presence.UNKNOWN) throw new AssertionError("unknown is not active");
+        if(ComputerDisplayPolicy.shouldSleep(ComputerDisplayPolicy.Presence.OFFLINE,true,true,115,29999)) throw new AssertionError("off grace");
+        if(!ComputerDisplayPolicy.shouldSleep(ComputerDisplayPolicy.Presence.OFFLINE,true,true,115,30000)) throw new AssertionError("camera must not postpone computer off");
+        if(!ComputerDisplayPolicy.shouldSleep(ComputerDisplayPolicy.Presence.OFFLINE,true,true,0,0)) throw new AssertionError("already dimmed closes immediately");
+        for(ComputerDisplayPolicy.Presence p:new ComputerDisplayPolicy.Presence[]{ComputerDisplayPolicy.Presence.ONLINE,ComputerDisplayPolicy.Presence.GRACE,ComputerDisplayPolicy.Presence.UNKNOWN})
+            if(ComputerDisplayPolicy.shouldSleep(p,true,true,0,99999)) throw new AssertionError("only confirmed offline closes");
+        if(ComputerDisplayPolicy.shouldSleep(ComputerDisplayPolicy.Presence.OFFLINE,false,true,115,99999)) throw new AssertionError("already sleeping");
+        if(ComputerDisplayPolicy.shouldSleep(ComputerDisplayPolicy.Presence.OFFLINE,true,false,115,99999)) throw new AssertionError("do not close settings or permission pages");
+        if(ComputerDisplayPolicy.shouldSleep(ComputerDisplayPolicy.Presence.OFFLINE,true,true,-1,29999)) throw new AssertionError("unknown brightness is not zero");
+        if(!ComputerDisplayPolicy.shouldSleep(ComputerDisplayPolicy.Presence.OFFLINE,true,true,-1,30000)) throw new AssertionError("brightness read failure must not suppress confirmed off");
         System.out.println("Computer display lease: fresh, grace, stale, missing and clock-skew passed.");
     }
 }

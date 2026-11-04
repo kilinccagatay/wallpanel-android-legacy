@@ -89,17 +89,22 @@ public final class SamsungComputerDisplay {
         android.os.Looper.loop();
     }
     private static void runPolicy(Context context,PowerManager pm,URL url,long stale,long runSeconds,boolean computerState) throws Exception {
-        long started=android.os.SystemClock.elapsedRealtime();int failures=0;
+        long started=android.os.SystemClock.elapsedRealtime(),offlineSince=-1;int failures=0;
         try {
             while(runSeconds==0 || android.os.SystemClock.elapsedRealtime()-started<runSeconds*1000) {
                 if(owned){cpu.acquire(90000);if(pm.isInteractive()){owned=false;OWNED.delete();cpu.release();}}
                 ComputerDisplayPolicy.Presence presence;
                 try{presence=report(url,stale,computerState);failures=0;}
                 catch(Exception unavailable){presence=ComputerDisplayPolicy.Presence.UNKNOWN;failures++;}
+                long now=android.os.SystemClock.elapsedRealtime();
+                if(presence==ComputerDisplayPolicy.Presence.OFFLINE){
+                    if(offlineSince<0) offlineSince=now;
+                }else{offlineSince=-1;}
                 if(presence==ComputerDisplayPolicy.Presence.ONLINE){wakeOwned();}
                 else if(presence==ComputerDisplayPolicy.Presence.UNKNOWN && failures!=1){wakeOwned();}
                 else if(presence==ComputerDisplayPolicy.Presence.OFFLINE && pm.isInteractive()
-                        && brightness()==0 && panelForeground()) {
+                        && ComputerDisplayPolicy.shouldSleep(presence,true,panelForeground(),
+                                brightness(),now-offlineSince)) {
                     cpu.acquire(90000);OWNED.createNewFile();owned=true;
                     try{key("223");}catch(Exception failed){wakeOwned();}
                 }

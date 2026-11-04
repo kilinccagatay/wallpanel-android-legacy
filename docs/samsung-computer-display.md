@@ -167,8 +167,10 @@ point this helper at the separate computer sensor, adding `"computer_state": tru
 to its private JSON. Keep `stale_seconds` for missed final sleep/shutdown reports.
 See the companion [computer activity guide](https://github.com/kilinccagatay/mac-call-indicator/blob/codex/workday-agenda/docs/computer-activity.md).
 
-A fresh computer `off` requests full display-off after the app's ordinary idle
-brightness reaches zero. A fresh `on` wakes only a helper-owned sleeping screen.
+A fresh computer `off` requests full display-off immediately after ordinary
+idle brightness reaches zero, or after 30 seconds of continuously confirmed
+OFFLINE status even if camera motion keeps the panel bright (plus polling/network
+latency). This bounded override applies only while the Samsung panel is foreground. A fresh `on` wakes only a helper-owned sleeping screen.
 HA's 40-second entity-availability expiry is a grace period until the configured
 shutdown threshold; it must not momentarily wake an already sleeping screen.
 The legacy timestamp-only mode remains the default if `computer_state` is absent.
