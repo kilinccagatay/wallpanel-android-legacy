@@ -85,3 +85,14 @@ unlock test with the camera uncovered. Physical result is PENDING. Restore only
 the original JAR and restart this helper's supervisor for rollback; keep all
 private settings and the other helpers unchanged. The earlier not-deployed
 notes above describe the preceding blocked stage, not the current installation.
+
+### Physical confirmation and camera clarification
+
+On deployed revision `286cbba`, the user confirmed the screen closed after Mac
+lock/Esc and reopened when the Mac returned. The user then clarified that the
+camera lens was covered throughout. This is a targeted PASS for Mac-driven
+close/reopen with camera covered; it does not validate the new bright-camera
+override. The camera-uncovered repeat remains PENDING and has been requested.
+The bounded recording could not be retrieved afterward because Wi-Fi ADB was
+offline again. No telemetry claim is inferred from the physical confirmation.
+The manual power/camera TODO and remaining full regression gate remain open.
