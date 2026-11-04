@@ -96,3 +96,14 @@ override. The camera-uncovered repeat remains PENDING and has been requested.
 The bounded recording could not be retrieved afterward because Wi-Fi ADB was
 offline again. No telemetry claim is inferred from the physical confirmation.
 The manual power/camera TODO and remaining full regression gate remain open.
+
+### Camera-uncovered confirmation — 2026-11-04
+
+The user repeated Mac lock → Esc → 60-second wait → unlock with the Samsung
+camera uncovered and explicitly confirmed **the screen fully closed, then
+reopened**. Together with the preceding covered-camera test, the targeted real
+Mac lock/unlock feature is PASS on deployed revision `286cbba`. No additional
+runtime change accompanied this record. The APK, preferences and Denver remain
+unchanged. Repeated/dim-room cycles, physical power behavior, cold boot and the
+remaining full regression checklist stay PENDING; the separately deferred manual
+power/camera TODO is not closed by these tests.
