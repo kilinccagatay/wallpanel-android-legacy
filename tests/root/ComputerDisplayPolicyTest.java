@@ -29,6 +29,10 @@ public final class ComputerDisplayPolicyTest {
         if(ComputerDisplayPolicy.shouldSleep(ComputerDisplayPolicy.Presence.OFFLINE,true,false,115,99999)) throw new AssertionError("do not close settings or permission pages");
         if(ComputerDisplayPolicy.shouldSleep(ComputerDisplayPolicy.Presence.OFFLINE,true,true,-1,29999)) throw new AssertionError("unknown brightness is not zero");
         if(!ComputerDisplayPolicy.shouldSleep(ComputerDisplayPolicy.Presence.OFFLINE,true,true,-1,30000)) throw new AssertionError("brightness read failure must not suppress confirmed off");
+        for(ComputerDisplayPolicy.Presence p:ComputerDisplayPolicy.Presence.values()) {
+            if(ComputerDisplayPolicy.shouldWake(false,p)) throw new AssertionError("never own manual sleep");
+            if(ComputerDisplayPolicy.shouldWake(true,p)!=(p==ComputerDisplayPolicy.Presence.ONLINE)) throw new AssertionError("only confirmed online may wake; not outages");
+        }
         System.out.println("Computer display lease: fresh, grace, stale, missing and clock-skew passed.");
     }
 }

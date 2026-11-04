@@ -251,6 +251,7 @@ class WallPanelService : LifecycleService(), MQTTModule.MQTTListener {
     }
 
     private fun configurePowerOptions() {
+        if (com.thanksmister.iot.wallpanellegacy.modules.SamsungComputerWakeGate.blockAutomatic(this)) return
         Timber.d("configurePowerOptions")
         if (partialWakeLock != null && !partialWakeLock!!.isHeld) {
             partialWakeLock!!.acquire(3000)
@@ -601,6 +602,7 @@ class WallPanelService : LifecycleService(), MQTTModule.MQTTListener {
 
     //@SuppressLint("WakelockTimeout")
     private fun switchScreenOn() {
+        if (com.thanksmister.iot.wallpanellegacy.modules.SamsungComputerWakeGate.blockAutomatic(this)) return
         Timber.d("switchScreenOn")
         if (partialWakeLock != null && !partialWakeLock!!.isHeld) {
             Timber.d("partialWakeLock")
@@ -645,6 +647,7 @@ class WallPanelService : LifecycleService(), MQTTModule.MQTTListener {
     }
 
     private fun setBrightScreen(brightness: Int) {
+        if (com.thanksmister.iot.wallpanellegacy.modules.SamsungComputerWakeGate.blockBrightness(this)) return
         Timber.d("setBrightScreen $brightness")
         changeScreenBrightness(brightness)
         if (configuration.cameraMotionOnTime > 0 && configuration.cameraMotionBright) {

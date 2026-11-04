@@ -3,6 +3,10 @@ package com.thanksmister.iot.wallpanellegacy.root;
 /** Epoch-based presence lease. Meeting on/off is deliberately irrelevant. */
 public final class ComputerDisplayPolicy {
     public enum Presence { ONLINE, GRACE, OFFLINE, UNKNOWN }
+    /** A network error or unknown report is never proof that the Mac woke. */
+    public static boolean shouldWake(boolean owned, Presence presence) {
+        return owned && presence == Presence.ONLINE;
+    }
     /** Camera activity must not postpone explicit computer-off indefinitely. */
     public static boolean shouldSleep(Presence presence, boolean interactive,
                                       boolean panelForeground, int brightness,

@@ -143,3 +143,13 @@ configurations.all {
         force 'com.android.support:support-v7:27.1.1'
     }
 }
+
+// Samsung-only wake-gate revision; do not change Denver's version or package.
+android.applicationVariants.all { variant ->
+    if (variant.productFlavors.any { it.name == 'samsung' }) {
+        variant.outputs.all {
+            versionCodeOverride = 8421
+            versionNameOverride = "0.8.4 Build 21 Samsung"
+        }
+    }
+}

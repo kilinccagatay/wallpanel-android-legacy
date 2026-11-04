@@ -2,7 +2,9 @@
 
 Optional, rooted **SM-J510FN / Android 6 (API 23)** profile. Never install these
 helpers on Denver or copy Denver's Allwinner display controls to Samsung.
-This adds no APK, firmware, accessibility permission or Mac application update.
+The original helper needed no APK update. The current network/camera wake guard
+requires Samsung Build 21 with the matching root helper; it adds no permission,
+firmware or Mac application update. Denver is excluded.
 
 ## Behavior
 
@@ -21,12 +23,16 @@ trouble, so this is not proof of a shutdown.
 - A fresh heartbeat wakes a screen put to sleep by this helper. Manual sleep is
   not claimed or undone. Manual/proximity wakes are allowed; the existing idle
   timeout still owns the next dark transition.
-- Missing/future/invalid data is unknown. Two consecutive network failures restore
-  a helper-owned sleeping screen to normal mode instead of leaving it stuck.
+- Missing/future/invalid data and HTTP/network failures are UNKNOWN. They never
+  wake a helper-owned sleeping screen; only a fresh ONLINE report may do that.
+  Physical/manual wake remains available. See the
+  [controlled outage review](samsung-network-wake-review.md).
 
 A partial CPU wake lock is held only while the helper owns full screen-off, so
 Wi-Fi/heartbeat polling can wake the display. This is full **display** off, not a
-claim that the entire phone/CPU is in deep suspend. The camera policy is unchanged.
+claim that the entire phone/CPU is in deep suspend. While this helper owns a full
+sleep, Build 21 suppresses automatic wake requests using a renewable 30-second
+lease. Normal Mac-online camera behavior and physical power keys remain intact.
 The root process adds approximately 48 MB RSS on the reference phone, with a
 10-second read interval and bounded HTTP connection/read timeouts.
 
@@ -61,7 +67,12 @@ Install `samsung-computer-display.sh` as
 its worker, waits at most two minutes for boot, and restarts a stopped worker after
 10 seconds. PID/command checks and a local socket prevent duplicate workers.
 Existing 89 orientation, 90 Wi-Fi ADB and 91 backlight helpers remain intact.
-Status is in `/data/local/tmp/samsung-computer-display.status`; configuration,
+Bounded transition/action diagnostics are in
+`/data/local/tmp/samsung-computer-display.events` (64 KiB plus one rotated file).
+They contain timestamps, presence/ownership, brightness and action names, never
+URLs, tokens, meeting titles or camera data. `external_wake_observed` means Android
+became interactive without this worker sending a wake; it does not identify the
+external actor. Status is in `/data/local/tmp/samsung-computer-display.status`; configuration,
 logs and ownership files are private device data. The helper never records
 meeting names, participants, credentials or report URLs in its own status.
 
