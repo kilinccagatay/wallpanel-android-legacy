@@ -113,3 +113,20 @@ Full boot/overnight/general acceptance remains PENDING until actually observed.
 
 Overall: controlled reproduction and targeted fix PASS; full acceptance PENDING.
 An overnight issue is not declared resolved based on a two-minute test alone.
+
+
+## User follow-up — 2026-11-05
+
+- PASS targeted: user repeated the real Mac lock → Esc → wait → unlock cycle
+  twice and confirmed Samsung woke after unlocking on both attempts. User
+  estimates wake latency at slightly more than five seconds; this is not a
+  measured upper bound. The helper polls about every ten seconds, in addition
+  to upstream report and request latency, so wake is not instantaneous.
+- The reply confirms wake on both attempts but does not separately confirm
+  complete physical darkness during the locked interval. That part remains
+  PENDING for the final installed revision.
+- User reports granting the existing navigation Accessibility permission.
+  Permission grant alone does not verify key interception, first touch, sound,
+  or landscape; those physical checks remain PENDING.
+- No polling, APK, runtime setting or permission was changed for this follow-up.
+  Full regression and overnight acceptance remain PENDING.
