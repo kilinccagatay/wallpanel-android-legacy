@@ -155,7 +155,7 @@ previous deployment. The office HTML was not redeployed.
 | --- | --- | --- |
 | D01, D06–D08, D12–D13 | PENDING | Cold boot, physical keys, first touch, extended and overnight use have not been repeated. |
 | D02–D04 | PASS targeted | Both brightness readings reached zero, stayed there for about 39 seconds, and returned to 115 when the user intentionally moved a hand in front of the lens. Three-cycle and dim-room checks remain pending. |
-| D05 | PASS targeted | The repeat test held both brightness readings at zero for at least 137 seconds with the lens uncovered. Earlier shorter wakes could not be classified because movement was uncertain. |
+| D05 | PASS targeted | The repeat test held both brightness readings at zero for 158 seconds with the lens uncovered, then the user confirmed wake and both readings returned to 115. Earlier shorter wakes could not be classified because movement was uncertain. |
 | D09–D10 | N/A | Samsung office profile has no battery badge. |
 | D11 | PENDING | Live Mac helper reports ONLINE; all helper supervision paths have not been retested. |
 | D14 | PASS targeted | Signed in-place installation, saved preferences and landscape focus checked. |
