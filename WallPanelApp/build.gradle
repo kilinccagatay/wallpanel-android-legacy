@@ -148,8 +148,8 @@ configurations.all {
 android.applicationVariants.all { variant ->
     if (variant.productFlavors.any { it.name == 'samsung' }) {
         variant.outputs.all {
-            versionCodeOverride = 8421
-            versionNameOverride = "0.8.4 Build 21 Samsung"
+            versionCodeOverride = 8422
+            versionNameOverride = "0.8.4 Build 22 Samsung"
         }
     }
 }

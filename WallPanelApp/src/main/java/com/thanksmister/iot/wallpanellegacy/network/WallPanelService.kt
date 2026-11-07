@@ -87,6 +87,7 @@ class WallPanelService : LifecycleService(), MQTTModule.MQTTListener {
     private val brightTimer = Handler()
     private var timerActive = false
     private var motionWakeSuppressedUntil = 0L
+    @Volatile private var cameraSettlesAfterDimAt = 0L
     private var httpServer: AsyncHttpServer? = null
     private val mBinder = WallPanelServiceBinder()
     private val motionClearHandler = Handler()
@@ -214,6 +215,10 @@ class WallPanelService : LifecycleService(), MQTTModule.MQTTListener {
 
     /** Turn the backlight fully off while leaving the dashboard and camera alive. */
     private val dimScreen = Runnable {
+        // Let the camera settle after losing light from the Samsung panel.
+        if (packageName == "com.thanksmister.iot.wallpanellegacy.samsung") {
+            cameraSettlesAfterDimAt = SystemClock.elapsedRealtime() + AUTO_DIM_CAMERA_SETTLE_MS
+        }
         changeScreenBrightness(MOTION_DIM_BRIGHTNESS)
         timerActive = false
     }
@@ -846,6 +851,10 @@ class WallPanelService : LifecycleService(), MQTTModule.MQTTListener {
             sendToastMessage(getString(R.string.toast_camera_source_error))
         }
         override fun onMotionDetected() {
+            if (SystemClock.elapsedRealtime() < cameraSettlesAfterDimAt) {
+                Timber.d("Ignoring camera motion while exposure settles after dim")
+                return
+            }
             Timber.i("Motion detected")
             if (SystemClock.elapsedRealtime() < motionWakeSuppressedUntil) {
                 Timber.d("Motion wake ignored during manual-off grace period")
@@ -894,6 +903,7 @@ class WallPanelService : LifecycleService(), MQTTModule.MQTTListener {
         const val MOTION_DIM_BRIGHTNESS = 0
         const val MOTION_OFF_THRESHOLD = 5
         const val MANUAL_OFF_MOTION_GRACE_MS = 2000L
+        private const val AUTO_DIM_CAMERA_SETTLE_MS = 2000L
         const val BROADCAST_ALERT_MESSAGE = "BROADCAST_ALERT_MESSAGE"
         const val BROADCAST_CLEAR_ALERT_MESSAGE = "BROADCAST_CLEAR_ALERT_MESSAGE"
         const val BROADCAST_TOAST_MESSAGE = "BROADCAST_TOAST_MESSAGE"

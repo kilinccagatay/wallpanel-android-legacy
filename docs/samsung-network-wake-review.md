@@ -130,3 +130,43 @@ An overnight issue is not declared resolved based on a two-minute test alone.
   or landscape; those physical checks remain PENDING.
 - No polling, APK, runtime setting or permission was changed for this follow-up.
   Full regression and overnight acceptance remain PENDING.
+
+## Samsung automatic-dim camera settling — 2026-11-07
+
+Build 22 (8422) adds a two-second camera-motion settling period immediately
+after the Samsung backlight timer dims the display. The camera callback checks
+an elapsed-time deadline shared with the timer. Touch, proximity, the manual
+power grace period, and the Mac display-ownership gate retain their existing
+paths. Denver does not arm this deadline.
+
+Build 21 evidence: roughly 31-second cycles, with a camera event about 0.7
+seconds after dim and brightness returning to 115/255. The Mac helper showed
+ONLINE without a corresponding wake request. The user covered only the camera
+lens for 90 seconds and reported that the screen dimmed and stayed dark.
+An exposure transition is a plausible trigger; no camera frames were collected.
+
+Build 22 was installed over Build 21 with the same signer. Installed version
+and landscape panel focus were verified. Only Chromium's resource extraction
+timestamp differed in the preferences snapshot. The original Build 21 APK is
+retained privately for rollback, and the computer-display JAR hash matches the
+previous deployment. The office HTML was not redeployed.
+
+| Gate | Status | Evidence or limit |
+| --- | --- | --- |
+| D01, D06–D08, D12–D13 | PENDING | Cold boot, physical keys, first touch, extended and overnight use have not been repeated. |
+| D02–D04 | PASS targeted | Both brightness readings reached zero, stayed there for about 39 seconds, and returned to 115 when the user intentionally moved a hand in front of the lens. Three-cycle and dim-room checks remain pending. |
+| D05 | PASS targeted | The repeat test held both brightness readings at zero for at least 137 seconds with the lens uncovered. Earlier shorter wakes could not be classified because movement was uncertain. |
+| D09–D10 | N/A | Samsung office profile has no battery badge. |
+| D11 | PENDING | Live Mac helper reports ONLINE; all helper supervision paths have not been retested. |
+| D14 | PASS targeted | Signed in-place installation, saved preferences and landscape focus checked. |
+| U01 | N/A | Samsung uses the office layout. |
+| U02–U07 | PENDING | Dashboard content, sound and gestures were not all physically exercised. |
+| H01, H07–H08 | N/A | Denver-only arrangement, robot and countdown are absent from the office profile. |
+| H02–H06, H09–H10 | PENDING | Live household and dashboard controls were not exercised. |
+| E01 | PASS | Offline JDK 8 Samsung debug build, both existing computer wake policy tests and staged diff check passed. |
+| E02 | PASS targeted | Build 22 confirmed on the Samsung, with camera wake confirmed by the user. |
+| E03 | PASS | Only the intended service and build hunks plus this record are staged. |
+| E04 | PENDING | The complete physical and general acceptance gate remains open. |
+
+Overall: targeted camera wake and two-minute dark hold verified; complete
+regression remains PENDING.
