@@ -8,6 +8,7 @@ MAX_LEVEL=191
 SCRIPT_PATH=/system/xbin/wallpanel-backlight
 MODE_FILE=/data/local/wallpanel-display-mode
 BACKLIGHT_GATE=/sys/bus/i2c/devices/0-0034/axp20-gpio.29
+DISPLAY_STATE=/data/local/wallpanel-backlight-state
 # Preserve the existing LCD-off profile unless explicitly selected otherwise.
 DISPLAY_MODE=$(cat "$MODE_FILE" 2>/dev/null)
 case "$DISPLAY_MODE" in
@@ -27,6 +28,13 @@ fi
 echo $$ > "$PIDFILE"
 trap 'busybox rm -f "$PIDFILE"' EXIT
 trap 'exit 0' INT TERM
+
+publish_display_state() {
+    (umask 022; echo "$1" > "$DISPLAY_STATE.new") &&
+        busybox mv -f "$DISPLAY_STATE.new" "$DISPLAY_STATE"
+}
+
+publish_display_state dark || exit 1
 
 read_android_brightness() {
     sqlite3 "$SETTINGS_DB" \
@@ -76,6 +84,7 @@ while true; do
             # avoid redundant brightness writes in the backlight-only profile.
             if [ "$LEVEL" != "$LAST_LEVEL" ] || \
                     { [ "$DISPLAY_MODE" = lcd-off ] && [ "$OFF_REASSERT_COUNT" -ge 5 ]; }; then
+                publish_display_state dark || exit 1
                 if [ "$DISPLAY_MODE" = backlight-only ]; then
                     set_backlight_gate 0 || {
                         echo "$(date) backlight-only: unable to close light gate" >> "$LOGFILE"
@@ -98,14 +107,15 @@ while true; do
                 if [ "$HARDWARE_LEVEL" -gt "$MAX_LEVEL" ]; then
                     HARDWARE_LEVEL=$MAX_LEVEL
                 fi
-                if [ "$DISPLAY_MODE" = lcd-off ]; then "$TOOL" on; fi
-                "$TOOL" "$HARDWARE_LEVEL"
+                if [ "$DISPLAY_MODE" = lcd-off ]; then "$TOOL" on || exit 1; fi
+                "$TOOL" "$HARDWARE_LEVEL" || exit 1
                 if [ "$DISPLAY_MODE" = backlight-only ]; then
                     set_backlight_gate 1 || {
                         echo "$(date) backlight-only: unable to open light gate" >> "$LOGFILE"
                         exit 1
                     }
                 fi
+                publish_display_state lit || exit 1
                 echo "$(date) android=$LEVEL lcd=on hardware=$HARDWARE_LEVEL" >> "$LOGFILE"
             fi
         fi

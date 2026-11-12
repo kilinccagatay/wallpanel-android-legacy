@@ -27,6 +27,7 @@ import android.os.BatteryManager
 import android.os.Bundle
 import android.os.Environment
 import android.os.Handler
+import android.provider.Settings
 import android.support.v4.content.LocalBroadcastManager
 import android.view.KeyEvent
 import android.view.MotionEvent
@@ -46,6 +47,7 @@ import com.thanksmister.iot.wallpanellegacy.ui.views.BatteryBadgeView
 import dagger.android.support.DaggerAppCompatActivity
 import timber.log.Timber
 import java.io.File
+import java.io.IOException
 import javax.inject.Inject
 
 abstract class BrowserActivity : DaggerAppCompatActivity() {
@@ -344,7 +346,37 @@ abstract class BrowserActivity : DaggerAppCompatActivity() {
         systemBarProgress = null
     }
 
+    private var consumingWakeTouch = false
+    private val denverBacklightState = File("/data/local/wallpanel-backlight-state")
+
+    private fun isDenverDisplayDark(): Boolean {
+        val brightness = Settings.System.getInt(contentResolver, Settings.System.SCREEN_BRIGHTNESS, 0)
+        if (brightness <= WallPanelService.MOTION_OFF_THRESHOLD) return true
+        // The brightness setting can rise before the hardware helper opens the backlight gate.
+        return try {
+            denverBacklightState.readText().trim() != "lit"
+        } catch (e: IOException) {
+            true
+        }
+    }
+
     override fun dispatchTouchEvent(event: MotionEvent): Boolean {
+        if (event.actionMasked == MotionEvent.ACTION_DOWN) {
+            // Denver's backlight helper treats brightness levels 0–5 as dark.
+            // Capture the whole gesture even if the wake broadcast relights it
+            // before the finger is lifted.
+            consumingWakeTouch = usesRootLegacySystemBar() && isDenverDisplayDark()
+            if (consumingWakeTouch) {
+                resetScreen()
+            }
+        }
+        if (consumingWakeTouch) {
+            if (event.actionMasked == MotionEvent.ACTION_UP || event.actionMasked == MotionEvent.ACTION_CANCEL) {
+                consumingWakeTouch = false
+            }
+            return true
+        }
+
         val handled = super.dispatchTouchEvent(event)
         if (!systemBarVisible && !usesRootLegacySystemBar()) {
             // ViewRootImpl clears Jelly Bean's HIDE_NAVIGATION bit immediately
