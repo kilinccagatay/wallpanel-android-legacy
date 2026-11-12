@@ -11,6 +11,7 @@ SETTINGS_DB=/data/data/com.android.providers.settings/databases/settings.db
 MAX_RSS_KB=180000
 MIN_DARK_SECONDS=300
 SCRIPT_PATH=/system/xbin/wallpanel-watchdog
+BOOT_ROTATION_CHECK=/dev/.wallpanel-boot-rotation-checked
 
 if [ -f "$PIDFILE" ]; then
     OLD_PID=$(cat "$PIDFILE" 2>/dev/null)
@@ -56,6 +57,37 @@ start_dashboard() {
     sleep 12
 }
 
+repair_boot_rotation() {
+    [ ! -e "$BOOT_ROTATION_CHECK" ] || return 1
+    [ "$(getprop sys.boot_completed)" = 1 ] || return 1
+    [ "$(getprop init.svc.bootanim)" = stopped ] || return 1
+
+    ROTATION_LOCK=$(sqlite3 "$SETTINGS_DB" \
+        "select value from system where name='accelerometer_rotation';" 2>/dev/null)
+    [ "$ROTATION_LOCK" = 0 ] || return 1
+    EXPECTED_ROTATION=$(sqlite3 "$SETTINGS_DB" \
+        "select value from system where name='user_rotation';" 2>/dev/null)
+    case "$EXPECTED_ROTATION" in 0|2) ;; *) return 1 ;; esac
+
+    TOUCH_ROTATION=$(dumpsys input 2>/dev/null |
+        busybox awk '/SurfaceOrientation:/ { print $2 }' | busybox sort -u)
+    DISPLAY_ROTATION=$(dumpsys SurfaceFlinger 2>/dev/null |
+        busybox sed -n 's/.*orientation=\([0-3]\), canDraw=1.*/\1/p' | busybox head -1)
+    [ -n "$TOUCH_ROTATION" ] && [ -n "$DISPLAY_ROTATION" ] || return 1
+    : > "$BOOT_ROTATION_CHECK" || return 1
+    if [ "$TOUCH_ROTATION" = "$EXPECTED_ROTATION" ] &&
+            [ "$DISPLAY_ROTATION" = "$EXPECTED_ROTATION" ]; then
+        log_message "boot_rotation_ok: rotation=$EXPECTED_ROTATION"
+        return 1
+    fi
+
+    # Once WindowManager is ready, reopening WallPanel applies the saved
+    # rotation to both the display and touch coordinates.
+    am force-stop "$PACKAGE" >/dev/null 2>&1
+    sleep 2
+    start_dashboard "boot_rotation_relaunch: expected=$EXPECTED_ROTATION display=$DISPLAY_ROTATION"
+}
+
 [ ! -r /system/xbin/wallpanel-http-recovery ] || . /system/xbin/wallpanel-http-recovery
 
 DARK_SINCE=0
@@ -89,6 +121,8 @@ while true; do
         elif ! echo "$FOCUS" | busybox grep -q \
                 "$PACKAGE/$PACKAGE.ui.activities.BrowserActivityLegacy"; then
             start_dashboard "dashboard_not_focused: focus=$FOCUS dashboard_started"
+        elif repair_boot_rotation; then
+            continue
         else
             RSS_KB=$(busybox awk '/VmRSS:/ {print $2}' "/proc/$APP_PID/status" 2>/dev/null)
             DARK_SECONDS=0
