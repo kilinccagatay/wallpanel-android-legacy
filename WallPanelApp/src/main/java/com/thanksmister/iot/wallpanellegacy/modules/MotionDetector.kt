@@ -17,6 +17,7 @@
 package com.thanksmister.iot.wallpanellegacy.modules
 
 import android.util.SparseArray
+import android.os.SystemClock
 
 import com.google.android.gms.vision.Detector
 import com.google.android.gms.vision.Frame
@@ -31,9 +32,18 @@ import timber.log.Timber
 /**
  * Created by Michael Ritchie on 7/6/18.
  */
-class MotionDetector private constructor(private val minLuma: Int, private val motionLeniency: Int) : Detector<Motion>() {
+class MotionDetector private constructor(
+        private val minLuma: Int,
+        private val motionLeniency: Int,
+        private val processingIntervalMs: Long
+) : Detector<Motion>() {
+
+    companion object {
+        private const val LUMA_SAMPLE_STEP = 4
+    }
 
     private var aggregateLumaMotionDetection: AggregateLumaMotionDetection? = null
+    private var lastProcessedAtMs = 0L
 
     init {
         aggregateLumaMotionDetection = AggregateLumaMotionDetection()
@@ -44,29 +54,36 @@ class MotionDetector private constructor(private val minLuma: Int, private val m
         if (frame == null) {
             throw IllegalArgumentException("No frame supplied.")
         } else {
+            val now = SystemClock.elapsedRealtime()
+            if (lastProcessedAtMs != 0L && now - lastProcessedAtMs < processingIntervalMs) {
+                return SparseArray()
+            }
+            lastProcessedAtMs = now
+
             val byteBuffer = frame.grayscaleImageData
             val bytes = byteBuffer.array()
             val w = frame.metadata.width
             val h = frame.metadata.height
             val sparseArray = SparseArray<Motion>()
             val motion = Motion()
-            motion.byteArray = bytes
-            motion.width = w
-            motion.height = h
 
-            val img = ImageProcessing.decodeYUV420SPtoLuma(bytes, w, h)
-            var lumaSum = 0
+            val img = ImageProcessing.decodeYUV420SPtoSampledLuma(
+                    bytes, w, h, LUMA_SAMPLE_STEP)
+            val sampledWidth = (w + LUMA_SAMPLE_STEP - 1) / LUMA_SAMPLE_STEP
+            val sampledHeight = (h + LUMA_SAMPLE_STEP - 1) / LUMA_SAMPLE_STEP
+            var lumaSum = 0L
             for (i in img) {
                 lumaSum += i
             }
-            if (lumaSum < minLuma) {
+            if (lumaSum * LUMA_SAMPLE_STEP * LUMA_SAMPLE_STEP < minLuma) {
                 motion.type = MOTION_TOO_DARK
                 sparseArray.put(0, motion)
                 return sparseArray
             }
 
             try {
-                val motionDetected = aggregateLumaMotionDetection!!.detect(img, w, h)
+                val motionDetected = aggregateLumaMotionDetection!!.detect(
+                        img, sampledWidth, sampledHeight)
                 if (motionDetected) {
                     motion.type = MOTION_DETECTED
                     //Timber.d("MOTION_DETECTED")
@@ -83,9 +100,13 @@ class MotionDetector private constructor(private val minLuma: Int, private val m
         }
     }
 
-    class Builder(private val minLuma: Int, private val motionLeniency: Int) {
+    class Builder(
+            private val minLuma: Int,
+            private val motionLeniency: Int,
+            private val processingIntervalMs: Long
+    ) {
         fun build(): MotionDetector {
-            return MotionDetector(minLuma, motionLeniency)
+            return MotionDetector(minLuma, motionLeniency, processingIntervalMs)
         }
     }
 }

@@ -1,4 +1,167 @@
 # WallPanel
+
+> This fork contains a lightweight runtime profile for the Denver TAC-70051
+> Home Assistant panel. It keeps the legacy Crosswalk dashboard, boot launch,
+> screen/brightness handling, and camera motion wake. MQTT, HTTP/MJPEG,
+> TTS/audio, sensor publishing, and Crashlytics are not started.
+
+The motion detector now honors `setting_camera_processinginterval`. Frames that
+arrive before the configured interval are discarded before luma conversion and
+comparison, which targets the high CPU usage seen on Android 4.1 hardware. The
+detector result no longer retains the full camera frame, reducing memory growth.
+Motion comparison uses a quarter-resolution luma sample in each dimension,
+reducing the detector's pixel workload to one sixteenth while preserving the
+coarse 10-by-10 motion regions used by the original algorithm.
+This mains-powered Denver profile defaults to `3 FPS` with a `333 ms`
+processing interval. It reduces the maximum wait between analyzed frames by
+about one third compared with the previous 2 FPS profile, without doubling the
+camera workload as 4 FPS would. Quarter-resolution sampling keeps the detector
+light enough for the tablet's older processor.
+
+### Optional rooted-device runtime optimizer
+
+[`device-root/wallpanel-runtime-optimizer`](device-root/wallpanel-runtime-optimizer)
+is an optional root daemon for tablets dedicated exclusively to WallPanel. It
+watches the WallPanel process and temporarily force-stops legacy calendar,
+Google sync/store, browser, gallery, launcher, keyboard, media-indexing and
+preinstalled entertainment apps after the dashboard starts. Core Android,
+SystemUI, Wi-Fi, camera/media services and unknown user packages are preserved.
+
+The optimizer does not use `pm disable` and does not uninstall anything. Stop
+the daemon and remove its boot-hook entry to restore normal Android behavior;
+no package re-enabling is required. Copy the script to `/system/xbin/`, make it
+executable, and launch it from the device's root boot hook
+(`install-recovery.sh` on the Denver firmware):
+
+```sh
+busybox setsid /system/xbin/wallpanel-runtime-optimizer </dev/null \
+    >/data/local/tmp/wallpanel-runtime-optimizer-boot.log 2>&1 &
+```
+
+### Rooted-device display power helper
+
+[`device-root/wallpanel-backlight`](device-root/wallpanel-backlight) translates
+WallPanel's inactive brightness value (`0`) into the Allwinner controller's
+hardware `LCD_OFF` command. Android and the camera pipeline remain logically
+awake, while the LCD panel itself is powered down. The helper periodically
+reasserts `LCD_OFF`, because a window or USB event can enable the panel without
+changing Android's stored brightness. Camera motion raises the brightness above
+zero; the helper then sends `LCD_ON` and applies the configured 191/255 (75%)
+brightness cap.
+
+The helper requires the small rooted-device utility built from
+[`device-root/sunxi-displayctl.c`](device-root/sunxi-displayctl.c) to be
+installed as `/system/xbin/sunxi-displayctl`. Unlike a brightness-only ioctl
+helper, it supports `on`, `off`, and numeric `0-255` commands.
+
+A real Android screen-off state is intentionally avoided on the TAC-70051. Its
+legacy Allwinner V4L2 driver stops delivering camera frames in that state, so
+motion can no longer wake the device. For this dedicated panel,
+`stay_on_while_plugged_in` must therefore remain `3` (AC and USB) to keep the
+camera pipeline alive while the hardware LCD is off.
+
+The rooted profile also installs
+[`device-root/axp20-supplyer.kl`](device-root/axp20-supplyer.kl). It remaps the
+enclosure power button from Android `POWER` to `CAMERA`; WallPanel consumes that
+key as a camera-safe power toggle. A short press turns the LCD off or on without
+putting Android to sleep or closing the legacy camera driver. Motion detection
+can still wake the display after a manual short-press shutdown, and every wake
+starts the same 30-second inactivity timer used by camera motion.
+
+A long press preserves the ROM's original power-off menu. WallPanel writes a
+trigger to shared storage, and the rooted
+[`device-root/wallpanel-power-menu`](device-root/wallpanel-power-menu) service
+uses [`device-root/PowerLongPress.java`](device-root/PowerLongPress.java) to
+inject a trusted held `POWER` event. Build its small dex jar with a Java 8 JDK,
+an Android SDK containing the legacy `dx` tool, and:
+
+```sh
+ANDROID_HOME=/path/to/android-sdk device-root/build-power-helper.sh
+```
+
+Install the resulting `wallpanel-power.jar` as
+`/system/framework/wallpanel-power.jar`, and install the service script as
+`/system/xbin/wallpanel-power-menu`. The Denver boot hook starts it
+automatically. The helper exists because allowing Android to process the raw
+short `POWER` event would enter real screen sleep and stop this tablet's camera
+driver.
+
+### Kiosk SystemBar control
+
+Build 8 fixes first-tap loss on rooted Jelly Bean devices without changing the
+dashboard. See the [diagnosis, fix, and validation notes](docs/first-touch-fix.md).
+
+WallPanel starts with Android's bottom SystemBar hidden so the dashboard uses
+the full 800 x 480 display. Long-press the native battery badge to show the
+Android navigation controls for twelve seconds; WallPanel then returns to kiosk
+mode automatically. A short loading dialog covers SystemUI's cold-start delay.
+The badge is placed on the edge opposite the SystemBar so
+it remains reachable while the controls are open; the timeout is an additional
+escape path. This gesture is intentionally attached to the badge rather than
+the dashboard, so Home Assistant cards keep their normal tap and hold behavior.
+
+Android 4.1 reveals its legacy SystemBar after an ordinary screen touch even
+when an app requests lean-back mode. The rooted
+[`device-root/wallpanel-systemui`](device-root/wallpanel-systemui) helper stops
+the SystemUI service while WallPanel is in kiosk mode, so ordinary dashboard
+touches cannot reveal the bar at all. SystemUI remains disabled during kiosk
+use because this ROM otherwise restarts the service unpredictably. The boot
+hook explicitly re-enables and starts SystemUI before launching WallPanel on
+every reboot, then starts the kiosk helper. ADB is initialized first to preserve
+a recovery path. Trigger files from the battery badge explicitly start or stop
+the service.
+
+Build the Android 4.1-compatible Binder helper with an installed Android SDK:
+
+```sh
+ANDROID_HOME=/path/to/android-sdk device-root/build-systemui-helper.sh
+```
+
+Install the resulting `wallpanel-systemui.jar` as
+`/system/framework/wallpanel-systemui.jar`, and install the service script as
+`/system/xbin/wallpanel-systemui`. The Denver boot hook starts it
+automatically. If the kiosk helper ever needs to be bypassed from an ADB shell,
+restore the stock controls with:
+
+```sh
+su 0 pm enable com.android.systemui
+su 0 am startservice -n com.android.systemui/.SystemUIService
+```
+
+The application visibility flags remain as a non-root fallback and restore the
+hidden state after a touch completes. The rooted boot hook also disables the
+ROM's window and transition animations so fallback restoration does not
+produce a long slide-in animation. WallPanel requests kiosk mode whenever it is
+started or resumed. If the user leaves WallPanel through the temporary Android
+controls, SystemUI remains available in the other app until WallPanel resumes.
+
+Apply that persistent Android 4.1 setting as root through the settings provider:
+
+```sh
+content update --uri content://settings/system --bind value:s:3 \
+    --where "name='stay_on_while_plugged_in'"
+```
+
+### Persistent Wi-Fi ADB
+
+The Denver boot hook in
+[`device-root/install-recovery.sh`](device-root/install-recovery.sh) starts ADB
+on TCP port `5555` after every reboot. Connect from a computer on the same
+trusted LAN with `adb connect <tablet-ip>:5555`. This old ROM can leave the USB
+transport offline while adbd is in TCP mode; use Wi-Fi as the normal management
+path. Android 4.1 may expose the service without modern RSA authorization, so do
+not enable it on a guest, public, or otherwise untrusted network. Reserve the
+tablet's IP address in the router's DHCP settings so the connection address
+does not change.
+
+[`device-root/wallpanel-watchdog`](device-root/wallpanel-watchdog) restores the
+dashboard after a crash and contains Crosswalk's long-term memory growth. A
+high-RSS maintenance restart is permitted only after the display has remained
+dark continuously for five minutes. After the dashboard reloads, the backlight
+helper restores hardware `LCD_OFF` when brightness is still zero, without
+putting Android or the camera into real sleep. Short idle periods can therefore
+wake without exposing a maintenance reload.
+
 WallPanel (Legacy) is an Android application for Web Based Dashboards and Home Automation Platforms.  This legacy version supports older devices running Android OS 4.1 using the Crosswalk browser in addition to the WebView component.  Unfortunately, Crosswalk is no longer compatible with Android Studio build tools and this version will most like not be supported. 
 
 ## Support
@@ -194,7 +357,7 @@ app.launchUrl | URL | The URL the Dashboard launches at | Tutorial Webpage
 app.showActivity | true/false | On-screen indication of browser activity | true
 camera.cameraId | int | The camera ID to attach to | 0
 camera.motionEnabled | true/false | If the device camera is used for motion detection | false
-camera.motionCheckInterval | int | The interval the camera is polled for motion in milliseconds | 500
+camera.motionCheckInterval | int | The interval the camera is polled for motion in milliseconds | 333
 camera.motionLeniency | int | The leniency on changes in pictures between polls | 20
 camera.motionMinLuma | int | The minimum light needed to perform motion detection | 1000
 camera.motionWake | true/false | If motion activity should wake the device | true
@@ -214,3 +377,14 @@ mqtt.sensorFrequency | Int | The frequency to post sensor data in seconds, or 0 
 ## Credits
 
 WallPanel (Formerly HomeDash) is a fork from the [original WallPanel project](https://github.com/WallPanel-Project/wallpanel-android) developed by [quadportnick](https://github.com/quadportnick).
+
+
+## Optional Samsung computer-aware display
+
+A Samsung-only rooted helper can use the MacCallIndicator heartbeat to switch
+from idle backlight dimming to full display-off while the Mac is unreachable,
+and restore normal mode when reports resume. See the
+[setup, behavior, test evidence and rollback guide](docs/samsung-computer-display.md).
+
+Manual power-off camera wake remains a [tracked TODO](docs/samsung-display-todo.md);
+the complete device acceptance gate is not yet passed.

@@ -1,0 +1,72 @@
+#!/system/bin/sh
+
+PIDFILE=/data/local/tmp/wallpanel-systemui.pid
+LOGFILE=/data/local/tmp/wallpanel-systemui.log
+SHOW_TRIGGER=/mnt/sdcard/.wallpanel-systemui-show
+HIDE_TRIGGER=/mnt/sdcard/.wallpanel-systemui-hide
+SCRIPT_PATH=/system/xbin/wallpanel-systemui
+CONTROL_JAR=/system/framework/wallpanel-systemui.jar
+CONTROL_CLASS=com.thanksmister.iot.wallpanellegacy.root.SystemUiControl
+
+if [ -f "$PIDFILE" ]; then
+    OLD_PID=$(cat "$PIDFILE" 2>/dev/null)
+    if [ -n "$OLD_PID" ] && kill -0 "$OLD_PID" 2>/dev/null && \
+            busybox grep -q "$SCRIPT_PATH" "/proc/$OLD_PID/cmdline" 2>/dev/null; then
+        exit 0
+    fi
+    busybox rm -f "$PIDFILE"
+fi
+
+echo $$ > "$PIDFILE"
+trap 'busybox rm -f "$PIDFILE"' EXIT
+trap 'exit 0' INT TERM
+
+hide_systemui() {
+    # The Android 4.1 framework always reveals its tablet SystemBar on the
+    # first application touch. Stop the SystemUI service while WallPanel is in
+    # kiosk mode. This ROM restarts the service unpredictably if the package is
+    # enabled again while the dashboard is active, so it remains disabled
+    # until the user requests Android controls. The boot hook re-enables and
+    # starts SystemUI before launching WallPanel on every reboot.
+    CLASSPATH="$CONTROL_JAR" app_process /system/bin "$CONTROL_CLASS" stop \
+        >> "$LOGFILE" 2>&1
+    pm disable com.android.systemui >> "$LOGFILE" 2>&1
+    # SystemUI is marked persistent. SystemServer can recreate one full service
+    # process from its pending restart record even after the package is
+    # disabled. Drain that record with a few bounded kill passes; the final
+    # process is the ROM's small bars-free persistent shell.
+    KILL_PASS=0
+    while [ "$KILL_PASS" -lt 6 ]; do
+        for SYSTEMUI_PID in $(ps | busybox awk '/com.android.systemui/ { print $2 }'); do
+            kill -9 "$SYSTEMUI_PID" 2>/dev/null
+        done
+        sleep 2
+        if ! dumpsys window windows | busybox grep -q 'SystemBar paused'; then
+            break
+        fi
+        KILL_PASS=$((KILL_PASS + 1))
+    done
+    echo "$(date) kiosk: SystemUI hidden" >> "$LOGFILE"
+}
+
+show_systemui() {
+    pm enable com.android.systemui >> "$LOGFILE" 2>&1
+    am startservice -n com.android.systemui/.SystemUIService >> "$LOGFILE" 2>&1
+    echo "$(date) controls: SystemUI shown" >> "$LOGFILE"
+}
+
+# Discard stale requests left by an app update or interrupted helper, then
+# enter kiosk mode. Fresh requests are processed by the loop below.
+busybox rm -f "$SHOW_TRIGGER" "$HIDE_TRIGGER"
+hide_systemui
+
+while true; do
+    if [ -f "$SHOW_TRIGGER" ]; then
+        busybox rm -f "$SHOW_TRIGGER" "$HIDE_TRIGGER"
+        show_systemui
+    elif [ -f "$HIDE_TRIGGER" ]; then
+        busybox rm -f "$HIDE_TRIGGER"
+        hide_systemui
+    fi
+    busybox usleep 100000
+done

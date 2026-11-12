@@ -86,6 +86,8 @@ class WallPanelService : LifecycleService(), MQTTModule.MQTTListener {
     private var audioPlayerBusy: Boolean = false
     private val brightTimer = Handler()
     private var timerActive = false
+    private var motionWakeSuppressedUntil = 0L
+    @Volatile private var cameraSettlesAfterDimAt = 0L
     private var httpServer: AsyncHttpServer? = null
     private val mBinder = WallPanelServiceBinder()
     private val motionClearHandler = Handler()
@@ -141,18 +143,23 @@ class WallPanelService : LifecycleService(), MQTTModule.MQTTListener {
 
         this.appLaunchUrl = configuration.appLaunchUrl
 
-        configureMqtt()
+        // Lite runtime: keep only the power, motion camera, dashboard notification,
+        // and local screen/url broadcasts used by the Home Assistant panel.
         configurePowerOptions()
-        startHttp()
         configureCamera()
-        configureAudioPlayer()
+        if (configuration.cameraMotionBright) {
+            // Establish the same brightness/timer state on a fresh boot that a
+            // motion event would create. Otherwise Android may dim the display
+            // first and a later wake can be ignored when the stored setting is
+            // already at its previous maximum.
+            setBrightScreen(MOTION_WAKE_BRIGHTNESS)
+        }
         startForeground()
-        configureTextToSpeech()
-        startSensors()
 
         val filter = IntentFilter()
         filter.addAction(BROADCAST_EVENT_URL_CHANGE)
         filter.addAction(BROADCAST_EVENT_SCREEN_TOUCH)
+        filter.addAction(BROADCAST_EVENT_POWER_TOGGLE)
         filter.addAction(Intent.ACTION_SCREEN_ON)
         filter.addAction(Intent.ACTION_SCREEN_OFF)
         filter.addAction(Intent.ACTION_USER_PRESENT)
@@ -162,18 +169,11 @@ class WallPanelService : LifecycleService(), MQTTModule.MQTTListener {
 
     override fun onDestroy() {
         super.onDestroy()
-        if(mqttModule != null) {
-            mqttModule?.pause()
-            mqttModule = null
-        }
         if(localBroadCastManager != null) {
             localBroadCastManager?.unregisterReceiver(mBroadcastReceiver)
         }
         cameraReader.stopCamera()
-        sensorReader.stopReadings()
-        stopHttp()
         stopPowerOptions()
-        reconnectHandler.removeCallbacks(restartMqttRunnable)
     }
 
     override fun onBind(intent: Intent): IBinder? {
@@ -213,11 +213,13 @@ class WallPanelService : LifecycleService(), MQTTModule.MQTTListener {
             return state
         }
 
-    /**
-     * Dim screen, most devices won't go below 5
-     */
+    /** Turn the backlight fully off while leaving the dashboard and camera alive. */
     private val dimScreen = Runnable {
-        changeScreenBrightness(5)
+        // Let the camera settle after losing light from the Samsung panel.
+        if (packageName == "com.thanksmister.iot.wallpanellegacy.samsung") {
+            cameraSettlesAfterDimAt = SystemClock.elapsedRealtime() + AUTO_DIM_CAMERA_SETTLE_MS
+        }
+        changeScreenBrightness(MOTION_DIM_BRIGHTNESS)
         timerActive = false
     }
 
@@ -231,19 +233,6 @@ class WallPanelService : LifecycleService(), MQTTModule.MQTTListener {
         if (notification != null) {
             startForeground(ONGOING_NOTIFICATION_ID, notification)
         }
-
-        if (notification != null) {
-            startForeground(ONGOING_NOTIFICATION_ID, notification)
-        }
-        // listen for network connectivity changes
-        connectionLiveData = ConnectionLiveData(this)
-        connectionLiveData?.observe(this, Observer { connected ->
-            if(connected!!) {
-                handleNetworkConnect()
-            } else {
-                handleNetworkDisconnect()
-            }
-        })
     }
 
     private fun handleNetworkConnect() {
@@ -267,6 +256,7 @@ class WallPanelService : LifecycleService(), MQTTModule.MQTTListener {
     }
 
     private fun configurePowerOptions() {
+        if (com.thanksmister.iot.wallpanellegacy.modules.SamsungComputerWakeGate.blockAutomatic(this)) return
         Timber.d("configurePowerOptions")
         if (partialWakeLock != null && !partialWakeLock!!.isHeld) {
             partialWakeLock!!.acquire(3000)
@@ -617,6 +607,7 @@ class WallPanelService : LifecycleService(), MQTTModule.MQTTListener {
 
     //@SuppressLint("WakelockTimeout")
     private fun switchScreenOn() {
+        if (com.thanksmister.iot.wallpanellegacy.modules.SamsungComputerWakeGate.blockAutomatic(this)) return
         Timber.d("switchScreenOn")
         if (partialWakeLock != null && !partialWakeLock!!.isHeld) {
             Timber.d("partialWakeLock")
@@ -644,8 +635,9 @@ class WallPanelService : LifecycleService(), MQTTModule.MQTTListener {
                     //Automatic mode, need to be in manual to change brightness
                     Settings.System.putInt(contentResolver, Settings.System.SCREEN_BRIGHTNESS_MODE, Settings.System.SCREEN_BRIGHTNESS_MODE_MANUAL)
                 }
-                if (brightness in 1..255) {
+                if (brightness in 0..255) {
                     Settings.System.putInt(contentResolver, Settings.System.SCREEN_BRIGHTNESS, brightness)
+                    if (brightness == 0) notifyDashboardDark()
                 }
             } catch (e: SecurityException) {
                 Timber.e(e.message)
@@ -653,7 +645,14 @@ class WallPanelService : LifecycleService(), MQTTModule.MQTTListener {
         }
     }
 
+    // A backlight-only dim does not produce Android visibility/screen-off events.
+    // Keep this UI notification separate from brightness, power and camera policy.
+    private fun notifyDashboardDark() {
+        evalJavascript("window.dispatchEvent(new Event('panel-display-dark'));")
+    }
+
     private fun setBrightScreen(brightness: Int) {
+        if (com.thanksmister.iot.wallpanellegacy.modules.SamsungComputerWakeGate.blockBrightness(this)) return
         Timber.d("setBrightScreen $brightness")
         changeScreenBrightness(brightness)
         if (configuration.cameraMotionOnTime > 0 && configuration.cameraMotionBright) {
@@ -812,12 +811,26 @@ class WallPanelService : LifecycleService(), MQTTModule.MQTTListener {
             } else if (Intent.ACTION_SCREEN_OFF == intent.action ||
                     intent.action == Intent.ACTION_SCREEN_ON ||
                     intent.action == Intent.ACTION_USER_PRESENT) {
+                if (Intent.ACTION_SCREEN_OFF == intent.action) notifyDashboardDark()
                 Timber.i("Screen state changed")
                 publishMessage(COMMAND_STATE, state.toString())
             } else if (BROADCAST_EVENT_SCREEN_TOUCH == intent.action) {
                 Timber.i("Screen touched")
                 if (configuration.cameraMotionBright) {
-                    setBrightScreen(255)
+                    setBrightScreen(MOTION_WAKE_BRIGHTNESS)
+                }
+                publishMessage(COMMAND_STATE, state.toString())
+            } else if (BROADCAST_EVENT_POWER_TOGGLE == intent.action) {
+                if (screenBrightness <= MOTION_OFF_THRESHOLD) {
+                    Timber.i("Physical power key: LCD on")
+                    setBrightScreen(MOTION_WAKE_BRIGHTNESS)
+                } else {
+                    Timber.i("Physical power key: LCD off, camera remains active")
+                    brightTimer.removeCallbacks(dimScreen)
+                    timerActive = false
+                    motionWakeSuppressedUntil = SystemClock.elapsedRealtime() +
+                            MANUAL_OFF_MOTION_GRACE_MS
+                    changeScreenBrightness(MOTION_DIM_BRIGHTNESS)
                 }
                 publishMessage(COMMAND_STATE, state.toString())
             }
@@ -838,14 +851,23 @@ class WallPanelService : LifecycleService(), MQTTModule.MQTTListener {
             sendToastMessage(getString(R.string.toast_camera_source_error))
         }
         override fun onMotionDetected() {
+            if (SystemClock.elapsedRealtime() < cameraSettlesAfterDimAt) {
+                Timber.d("Ignoring camera motion while exposure settles after dim")
+                return
+            }
             Timber.i("Motion detected")
+            if (SystemClock.elapsedRealtime() < motionWakeSuppressedUntil) {
+                Timber.d("Motion wake ignored during manual-off grace period")
+                publishMotionDetected()
+                return
+            }
             if (configuration.cameraMotionWake) {
                 switchScreenOn()
             }
             if (configuration.cameraMotionBright) {
                 Timber.d("configuration.cameraMotionBright ${configuration.cameraMotionBright}")
                 switchScreenOn()
-                setBrightScreen(255)
+                setBrightScreen(MOTION_WAKE_BRIGHTNESS)
             }
             publishMotionDetected()
         }
@@ -875,7 +897,13 @@ class WallPanelService : LifecycleService(), MQTTModule.MQTTListener {
         const val ONGOING_NOTIFICATION_ID = 1
         const val BROADCAST_EVENT_URL_CHANGE = "BROADCAST_EVENT_URL_CHANGE"
         const val BROADCAST_EVENT_SCREEN_TOUCH = "BROADCAST_EVENT_SCREEN_TOUCH"
+        const val BROADCAST_EVENT_POWER_TOGGLE = "BROADCAST_EVENT_POWER_TOGGLE"
         const val SCREEN_WAKE_TIME = 30000L
+        const val MOTION_WAKE_BRIGHTNESS = 191 // 75% of the Android 0..255 range
+        const val MOTION_DIM_BRIGHTNESS = 0
+        const val MOTION_OFF_THRESHOLD = 5
+        const val MANUAL_OFF_MOTION_GRACE_MS = 2000L
+        private const val AUTO_DIM_CAMERA_SETTLE_MS = 2000L
         const val BROADCAST_ALERT_MESSAGE = "BROADCAST_ALERT_MESSAGE"
         const val BROADCAST_CLEAR_ALERT_MESSAGE = "BROADCAST_CLEAR_ALERT_MESSAGE"
         const val BROADCAST_TOAST_MESSAGE = "BROADCAST_TOAST_MESSAGE"

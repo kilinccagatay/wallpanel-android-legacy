@@ -136,6 +136,31 @@ public abstract class ImageProcessing {
     }
 
     /**
+     * Extract a reduced luma plane for motion detection. Motion detection only
+     * compares coarse regions, so retaining every camera pixel wastes CPU and
+     * memory on low-powered dashboard devices.
+     */
+    public static int[] decodeYUV420SPtoSampledLuma(byte[] yuv420sp, int width,
+                                                    int height, int sampleStep) {
+        if (yuv420sp == null) throw new NullPointerException();
+        if (sampleStep < 1) throw new IllegalArgumentException("sampleStep must be positive");
+
+        final int sampledWidth = (width + sampleStep - 1) / sampleStep;
+        final int sampledHeight = (height + sampleStep - 1) / sampleStep;
+        final int[] sampled = new int[sampledWidth * sampledHeight];
+
+        int output = 0;
+        for (int y = 0; y < height; y += sampleStep) {
+            final int rowOffset = y * width;
+            for (int x = 0; x < width; x += sampleStep) {
+                int luma = (0xff & yuv420sp[rowOffset + x]) - 16;
+                sampled[output++] = luma < 0 ? 0 : luma;
+            }
+        }
+        return sampled;
+    }
+
+    /**
      * Decode a YUV420SP image to RGB.
      * 
      * @param yuv420sp

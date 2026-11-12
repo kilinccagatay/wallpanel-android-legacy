@@ -1,0 +1,8 @@
+# Denver TAC-70051 dedicated panel profile.
+#
+# The AXP20 PMIC reports the enclosure power button as Linux key 116. Mapping
+# it to Android POWER tears down the legacy camera whenever it is pressed,
+# preventing motion wake. Map it to CAMERA instead; WallPanel consumes that key
+# as a dashboard wake request. The PMIC still handles hardware power-on while
+# the tablet is fully off.
+key 116   CAMERA            WAKE

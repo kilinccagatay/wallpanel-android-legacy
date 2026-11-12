@@ -19,17 +19,17 @@ apply plugin: 'com.android.application'
 apply plugin: 'kotlin-android-extensions'
 apply plugin: 'kotlin-android'
 apply plugin: 'kotlin-kapt'
-apply plugin: 'io.fabric'
-
 repositories {
-    maven { url 'https://maven.fabric.io/public' }
     mavenCentral()
+    flatDir {
+        dirs 'libs'
+    }
 }
 
 def versionMajor = 0
 def versionMinor = 8
 def versionPatch = 4
-def versionBuild = 7 // bump for dog food builds, public betas, etc.
+def versionBuild = 9 // bump for dog food builds, public betas, etc.
 
 android {
     kapt {
@@ -130,25 +130,26 @@ dependencies {
         exclude module: 'support-v4'
     }
 
-    implementation 'org.xwalk:xwalk_core_library:23.53.589.4'
+    implementation(name: 'xwalk_core_library-23.53.589.4', ext: 'aar')
     implementation 'com.koushikdutta.async:androidasync:2.1.9'
-    implementation 'io.github.silvaren:easyrs:0.5.3'
-
     // Logging
     implementation 'com.jakewharton.timber:timber:4.5.1'
 
-    implementation('com.crashlytics.sdk.android:crashlytics:2.9.4@aar') {
-        transitive = true;
-    }
-
-    implementation('com.crashlytics.sdk.android:answers:1.4.2@aar') {
-        transitive = true;
-    }
 }
 
 configurations.all {
     resolutionStrategy {
         force 'com.android.support:support-v4:27.1.1'
         force 'com.android.support:support-v7:27.1.1'
+    }
+}
+
+// Samsung-only wake-gate revision; do not change Denver's version or package.
+android.applicationVariants.all { variant ->
+    if (variant.productFlavors.any { it.name == 'samsung' }) {
+        variant.outputs.all {
+            versionCodeOverride = 8422
+            versionNameOverride = "0.8.4 Build 22 Samsung"
+        }
     }
 }

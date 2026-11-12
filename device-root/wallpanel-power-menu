@@ -1,0 +1,32 @@
+#!/system/bin/sh
+
+PIDFILE=/data/local/tmp/wallpanel-power-menu.pid
+LOGFILE=/data/local/tmp/wallpanel-power-menu.log
+TRIGGER=/mnt/sdcard/.wallpanel-power-longpress
+JAR=/system/framework/wallpanel-power.jar
+SCRIPT_PATH=/system/xbin/wallpanel-power-menu
+
+if [ -f "$PIDFILE" ]; then
+    OLD_PID=$(cat "$PIDFILE" 2>/dev/null)
+    if [ -n "$OLD_PID" ] && kill -0 "$OLD_PID" 2>/dev/null && \
+            busybox grep -q "$SCRIPT_PATH" "/proc/$OLD_PID/cmdline" 2>/dev/null; then
+        exit 0
+    fi
+    busybox rm -f "$PIDFILE"
+fi
+
+echo $$ > "$PIDFILE"
+trap 'busybox rm -f "$PIDFILE"' EXIT
+trap 'exit 0' INT TERM
+busybox rm -f "$TRIGGER"
+
+while true; do
+    if [ -f "$TRIGGER" ]; then
+        busybox rm -f "$TRIGGER"
+        echo "$(date) long_press: opening_android_power_menu" >> "$LOGFILE"
+        CLASSPATH="$JAR" app_process /system/bin \
+            com.thanksmister.iot.wallpanellegacy.root.PowerLongPress \
+            >> "$LOGFILE" 2>&1
+    fi
+    busybox usleep 100000
+done
