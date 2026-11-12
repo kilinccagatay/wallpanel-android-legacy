@@ -57,12 +57,8 @@ if [ -x /system/xbin/wallpanel-backlight ]; then
         >/data/local/tmp/wallpanel-backlight-boot.log 2>&1 &
 fi
 
-# Recover the dashboard after a low-memory kill and recycle Crosswalk before
-# its gradual memory leak can exhaust this tablet's limited RAM.
-if [ -x /system/xbin/wallpanel-watchdog ]; then
-    busybox setsid /system/xbin/wallpanel-watchdog </dev/null \
-        >/data/local/tmp/wallpanel-watchdog-boot.log 2>&1 &
-fi
+# The supervision loop below starts the watchdog. A detached launch here
+# would race that loop before the watchdog has written its PID file.
 
 # Reclaim RAM and background I/O from apps that are unnecessary while the
 # dedicated Home Assistant dashboard is running.

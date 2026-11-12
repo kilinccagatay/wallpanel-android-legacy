@@ -82,7 +82,11 @@ while true; do
         # service then closes and motion can no longer wake the display. Keep
         # the dedicated tablet on BrowserActivityLegacy, regardless of which
         # non-dashboard window displaced it.
-        if ! echo "$FOCUS" | busybox grep -q \
+        if [ -z "$FOCUS" ] || echo "$FOCUS" | busybox grep -q 'mCurrentFocus=null'; then
+            # Android can have an app process before its first window is ready.
+            # Let the current launch settle instead of starting another one.
+            :
+        elif ! echo "$FOCUS" | busybox grep -q \
                 "$PACKAGE/$PACKAGE.ui.activities.BrowserActivityLegacy"; then
             start_dashboard "dashboard_not_focused: focus=$FOCUS dashboard_started"
         else
