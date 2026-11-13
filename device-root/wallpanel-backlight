@@ -122,5 +122,9 @@ while true; do
         LAST_LEVEL=$LEVEL
     fi
 
-    sleep 1
+    if [ "$DISPLAY_MODE" = backlight-only ] && [ "$LAST_LEVEL" -ge 0 ] && [ "$LAST_LEVEL" -le 5 ]; then
+        busybox usleep 250000
+    else
+        sleep 1
+    fi
 done
